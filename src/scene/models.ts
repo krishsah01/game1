@@ -81,9 +81,9 @@ export class SoldierModel {
     mk('armFront', new BoxGeometry(0.13, 0.42, 0.14), tint.uniform);
     mk('head', new BoxGeometry(0.2, 0.22, 0.22), tint.skin);
     mk('helmet', new SphereGeometry(0.15, 10, 7, 0, Math.PI * 2, 0, Math.PI * 0.55), tint.helmet);
-    mk('rifle', new BoxGeometry(0.78, 0.07, 0.06), 0x1c1c1c);
-    mk('stock', new BoxGeometry(0.22, 0.11, 0.06), 0x2b2724);
-    mk('mag', new BoxGeometry(0.06, 0.16, 0.05), 0x1c1c1c);
+    mk('rifle', new BoxGeometry(0.62, 0.07, 0.06), 0x4a5055);
+    mk('stock', new BoxGeometry(0.2, 0.11, 0.06), 0x56473a);
+    mk('mag', new BoxGeometry(0.06, 0.16, 0.05), 0x3a3f43);
     this.outline.visible = false;
     this.group.add(this.body, this.outline);
   }
@@ -119,28 +119,33 @@ export class SoldierModel {
     const p = this.parts;
     const swing = moving ? Math.sin(this.walkPhase) * 0.45 : 0;
 
-    // Legs: standing = vertical columns; crouched = kneeling (one thigh horizontal).
-    const hipY = 0.92 - crouch * 0.42;
-    const thighLen = 0.44;
     const place = (m: Mesh, x: number, y: number, z: number, rz = 0) => {
       m.position.set(x, y, z);
       m.rotation.set(0, 0, rz);
     };
-    // Rear leg (z slightly negative) and front leg.
-    const rearRot = crouch * (-Math.PI / 2) * f + swing * (1 - crouch) * f;
-    const frontRot = crouch * (-Math.PI / 6) * f - swing * (1 - crouch) * f;
-    place(p.thighL!, -0.02 - Math.sin(rearRot) * thighLen * 0.5, hipY - Math.cos(rearRot) * thighLen * 0.5, -0.1, rearRot);
-    place(p.thighR!, 0.04 - Math.sin(frontRot) * thighLen * 0.5, hipY - Math.cos(frontRot) * thighLen * 0.5, 0.1, frontRot);
-    const kneeLX = -0.02 - Math.sin(rearRot) * thighLen;
-    const kneeLY = hipY - Math.cos(rearRot) * thighLen;
-    const kneeRX = 0.04 - Math.sin(frontRot) * thighLen;
-    const kneeRY = hipY - Math.cos(frontRot) * thighLen;
-    // Shins drop vertically from the knee; crouched rear shin lies flat.
-    const shinRearRot = crouch * (-Math.PI / 2) * f;
-    place(p.shinL!, kneeLX - Math.sin(shinRearRot) * 0.21, Math.max(0.21, kneeLY - Math.cos(shinRearRot) * 0.21), -0.1, shinRearRot);
-    place(p.shinR!, kneeRX, Math.max(0.21, kneeRY - 0.21), 0.1, 0);
-    place(p.bootL!, kneeLX - Math.sin(shinRearRot) * 0.42 - f * 0.02, 0.06, -0.1);
-    place(p.bootR!, kneeRX + f * 0.04, 0.06, 0.1);
+    /** Lays a box (length axis = local Y, base length `baseLen`) along segment a→b. */
+    const limb = (m: Mesh, ax: number, ay: number, bx: number, by: number, z: number, baseLen: number) => {
+      const len = Math.max(0.1, Math.hypot(bx - ax, by - ay));
+      m.position.set((ax + bx) / 2, (ay + by) / 2, z);
+      m.rotation.set(0, 0, Math.atan2(bx - ax, -(by - ay)));
+      m.scale.y = len / baseLen;
+    };
+    const mix = (a: number, b: number, t: number) => a + (b - a) * t;
+    // Legs: blend between standing columns and a kneeling pose (front foot planted,
+    // rear knee on the ground with the shin flat behind).
+    const t = crouch;
+    const s = swing * (1 - t);
+    const hipY = mix(0.92, 0.5, t);
+    const kneeF = { x: mix(0.04 + s * 0.16, 0.4, t) * f, y: mix(0.5, 0.5, t) };
+    const ankleF = { x: mix(0.04 + s * 0.2, 0.42, t) * f, y: 0.1 };
+    const kneeR = { x: mix(-0.02 - s * 0.16, -0.04, t) * f, y: mix(0.5, 0.1, t) };
+    const ankleR = { x: mix(-0.02 - s * 0.2, -0.46, t) * f, y: 0.1 };
+    limb(p.thighR!, 0, hipY, kneeF.x, kneeF.y, 0.1, 0.44);
+    limb(p.shinR!, kneeF.x, kneeF.y, ankleF.x, ankleF.y, 0.1, 0.42);
+    limb(p.thighL!, 0, hipY, kneeR.x, kneeR.y, -0.1, 0.44);
+    limb(p.shinL!, kneeR.x, kneeR.y, ankleR.x, ankleR.y, -0.1, 0.42);
+    place(p.bootR!, ankleF.x + f * 0.03, 0.06, 0.1);
+    place(p.bootL!, ankleR.x - f * 0.02 * t, 0.06, -0.1);
 
     // Torso and plate carrier between hip and shoulders; shoulders under the head.
     const headY = eyeY + 0.03;
@@ -156,27 +161,23 @@ export class SoldierModel {
     place(p.head!, f * 0.04, headY, 0);
     place(p.helmet!, f * 0.04, headY + 0.08, 0);
 
-    // Rifle: tip at (muzzleForward, muzzleY).
+    // Rifle: tip at (muzzleForward, muzzleY); the stock ends just behind the torso.
     const tipX = f * anchors.muzzleForward;
-    const rifleLen = 0.78;
-    place(p.rifle!, tipX - f * rifleLen * 0.5, muzzleY, 0.02);
-    place(p.stock!, tipX - f * (rifleLen + 0.06), muzzleY - 0.01, 0.02);
-    place(p.mag!, tipX - f * 0.4, muzzleY - 0.1, 0.02);
+    const rifleLen = 0.62;
+    place(p.rifle!, tipX - f * rifleLen * 0.5, muzzleY, 0.17);
+    place(p.stock!, tipX - f * (rifleLen + 0.08), muzzleY - 0.015, 0.17);
+    place(p.mag!, tipX - f * 0.34, muzzleY - 0.1, 0.17);
 
-    // Arms reach toward the rifle grip.
-    const gripX = tipX - f * 0.45;
-    const gripY = muzzleY - 0.04;
+    // Arms: hands on the foregrip and the pistol grip, drawn in front of the torso.
     const armFromShoulder = (m: Mesh, sx: number, sy: number, gx: number, gy: number, z: number) => {
-      const mx = (sx + gx) / 2;
-      const my = (sy + gy) / 2;
+      const len = Math.max(0.24, Math.hypot(gx - sx, gy - sy));
       const ang = Math.atan2(gx - sx, -(gy - sy));
-      m.position.set(mx, my, z);
+      m.position.set((sx + gx) / 2, (sy + gy) / 2, z);
       m.rotation.set(0, 0, ang);
-      const len = Math.hypot(gx - sx, gy - sy);
-      m.scale.y = Math.max(0.5, len / 0.42);
+      m.scale.y = len / 0.42;
     };
-    armFromShoulder(p.armFront!, f * 0.1, shoulderY, gripX + f * 0.12, gripY, 0.18);
-    armFromShoulder(p.armBack!, f * -0.05, shoulderY, gripX - f * 0.18, gripY + 0.02, -0.18);
+    armFromShoulder(p.armFront!, f * 0.06, shoulderY - 0.02, tipX - f * 0.28, muzzleY - 0.07, 0.2);
+    armFromShoulder(p.armBack!, f * -0.08, shoulderY - 0.02, tipX - f * 0.52, muzzleY - 0.12, 0.19);
 
     // Mirror the outline copy.
     for (const [name, mesh] of Object.entries(this.parts)) {

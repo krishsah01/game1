@@ -1,0 +1,89 @@
+# Example operations for the local API (GraphiQL: http://127.0.0.1:4000/graphql).
+# The browser client uses the same documents (src/graphql/documents.ts).
+
+# 1. Catalogue for the scenario selector (list fields only).
+query Scenarios {
+  scenarios {
+    id
+    kind
+    title
+    description
+  }
+}
+
+# 2. Full seed for one scenario: colliders, entities, zones, camera, defaults.
+query Scenario($id: ID!) {
+  scenario(id: $id) {
+    id
+    kind
+    seed
+    defaultConfig {
+      visionRange
+      visionFovDegrees
+      cameraStatus
+      smokeEnabled
+      baseSwayAmplitude
+    }
+    initialScene {
+      mapId
+      colliders {
+        id
+        bounds { center { x y z } size { x y z } }
+        blocksMovement
+        blocksSight
+        blocksShots
+        visualRole
+        isCover
+      }
+      entities { id kind team position { x y z } facingX stance script waypoints { x y z } holdSeconds }
+      depthZones { id label bounds { center { x y z } size { x y z } } }
+      recon { id position { x y z } lookAt { x y z } fovDegrees range }
+    }
+  }
+}
+# variables: { "id": "depth-shot" }
+
+# 3. Create an isolated session (revision 1, config copied from the scenario defaults).
+mutation CreateSession($scenarioId: ID!) {
+  createSession(scenarioId: $scenarioId) {
+    id
+    scenarioId
+    seed
+    revision
+    config { cameraStatus smokeEnabled visionRange }
+  }
+}
+# variables: { "scenarioId": "camera-intel" }
+
+# 4. Change configuration (optimistic concurrency via expectedRevision).
+mutation UpdateConfig($sessionId: ID!, $expectedRevision: Int!, $patch: DemoConfigPatch!) {
+  updateConfig(sessionId: $sessionId, expectedRevision: $expectedRevision, patch: $patch) {
+    id
+    revision
+    config { cameraStatus smokeEnabled visionRange baseSwayAmplitude }
+  }
+}
+# variables: { "sessionId": "<id from createSession>", "expectedRevision": 1, "patch": { "cameraStatus": "ONLINE" } }
+#
+# Error demonstrations (standard GraphQL `errors` array with extensions.code):
+#   patch: { "visionRange": -5 }            -> BAD_USER_INPUT  ("visionRange must be between 1 and 60")
+#   patch: { "smokeEnabled": null }         -> BAD_USER_INPUT, reason NULL_PATCH_FIELD
+#   sessionId: "sess-does-not-exist"        -> NOT_FOUND
+#   expectedRevision: 1 after a change      -> REVISION_CONFLICT (extensions.currentRevision)
+
+# 5. Reset to the scenario defaults (new revision). The browser rebuilds local runtime state from the cached seed.
+mutation ResetSession($sessionId: ID!, $expectedRevision: Int!) {
+  resetSession(sessionId: $sessionId, expectedRevision: $expectedRevision) {
+    id
+    revision
+    config { cameraStatus smokeEnabled }
+  }
+}
+
+# 6. Read a session back.
+query Session($id: ID!) {
+  session(id: $id) { id scenarioId seed revision config { cameraStatus smokeEnabled } }
+}
+
+# 7. API info (used as the connectivity probe).
+query ApiInfo { apiInfo { name version sessionCount sessionCap } }

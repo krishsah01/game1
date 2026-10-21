@@ -46,8 +46,8 @@ export type CoverState = 'none' | 'hidden' | 'observe' | 'aimOver';
 export const ANCHORS = {
   standing: { eyeY: 1.62, muzzleY: 1.38, height: 1.8, eyeForward: 0.12, muzzleForward: 0.62 },
   standingAim: { eyeY: 1.6, muzzleY: 1.42, height: 1.8, eyeForward: 0.12, muzzleForward: 0.62 },
-  crouched: { eyeY: 0.98, muzzleY: 0.92, height: 1.06, eyeForward: 0.14, muzzleForward: 0.58 },
-  observe: { eyeY: 1.24, muzzleY: 0.95, height: 1.4, eyeForward: 0.14, muzzleForward: 0.58 },
+  crouched: { eyeY: 0.98, muzzleY: 0.8, height: 1.06, eyeForward: 0.14, muzzleForward: 0.58 },
+  observe: { eyeY: 1.24, muzzleY: 0.86, height: 1.4, eyeForward: 0.14, muzzleForward: 0.58 },
   aimOver: { eyeY: 1.36, muzzleY: 1.24, height: 1.6, eyeForward: 0.14, muzzleForward: 0.6 },
 } satisfies Record<string, StanceAnchors>;
 

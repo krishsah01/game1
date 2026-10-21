@@ -5,3 +5,5 @@ dist-artifact/
 *.log
 .DS_Store
 docs/screenshots/*.tmp.png
+tests/zz-probe-*
+scripts/zz-probe-*

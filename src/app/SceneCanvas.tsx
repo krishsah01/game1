@@ -58,6 +58,8 @@ export function SceneCanvas({ controller, mode, devOptions, onToggleDeveloper, o
       },
     );
     input.attach();
+    // Small debug hook for scripted walkthroughs (world → screen projection).
+    (window as unknown as { __milsimLab?: unknown }).__milsimLab = { worldToScreen: (x: number, y: number, z: number) => view.worldToScreen(x, y, z) };
     if (controller.world) view.setScene(controller.world.scene);
     const prevReplaced = controller.onWorldReplaced;
     controller.onWorldReplaced = (world) => {

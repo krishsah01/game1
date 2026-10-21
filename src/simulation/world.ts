@@ -127,6 +127,8 @@ export interface Presentation {
     aimPoint: Vec3 | null;
   };
   staticLit: Map<string, number>;
+  /** Transient player-safe feedback line (null when expired). */
+  message: string | null;
   /** Omniscient information. Null in player mode. */
   dev: null | {
     playerSight: EntityObservation[];
@@ -167,6 +169,8 @@ export class World {
   log: LogEntry[] = [];
   staticLit = new Map<string, number>();
   lastFiringLineTest: { result: ShotResult; simTime: number } | null = null;
+  /** Short player-facing feedback (never reveals hidden state). */
+  message: { text: string; simTime: number } | null = null;
 
   private held: HeldInput = emptyHeld();
   private accumulator = 0;
@@ -218,6 +222,7 @@ export class World {
     this.log = [];
     this.staticLit = new Map();
     this.lastFiringLineTest = null;
+    this.message = null;
     this.wasMoving = false;
     this.playerSight = [];
     this.cameraSight = [];
@@ -574,7 +579,8 @@ export class World {
     const p = this.player;
     const m = p.cover.muzzle;
     const pointer = this.held.pointerWorld;
-    const x = pointer ? pointer.x : m.x + p.facingX * 20;
+    // Without a pointer (inspector buttons) aim 5 m ahead so the depth offset is realised at a target-like distance.
+    const x = pointer ? pointer.x : m.x + p.facingX * 5;
     const y = pointer ? pointer.y : m.y;
     return { x, y, z: this.aim.selectedDepth + offset };
   }
@@ -601,10 +607,12 @@ export class World {
     const p = this.player;
     if (!test && p.cover.state === 'hidden') {
       this.pushLog('Blind fire is disabled in the hidden state. Observe or aim over cover first.');
+      this.message = { text: 'BLIND FIRE DISABLED · observe or aim over', simTime: this.simTime };
       return null;
     }
     if (!test && p.ammo <= 0) {
       this.pushLog('Magazine empty. Press R to reload.');
+      this.message = { text: 'EMPTY · R to reload', simTime: this.simTime };
       return null;
     }
     const offset = currentDepthOffset(this.aim);
@@ -638,6 +646,9 @@ export class World {
       const a = this.actors.find((x) => x.id === hit.id);
       if (a) a.hitFlashUntil = this.simTime + 0.25;
     }
+    if (test) this.message = { text: hit ? `FIRING LINE · ${hit.kind === 'actor' ? 'clear to target' : `blocked by ${hit.label}`}` : 'FIRING LINE · clear', simTime: this.simTime };
+    else if (hit?.kind === 'actor' && hitObserved) this.message = { text: 'HIT', simTime: this.simTime };
+    else if (hit?.kind === 'collider') this.message = { text: `IMPACT · ${hit.label}`, simTime: this.simTime };
     const where = hit ? `${hit.kind === 'actor' ? 'ACTOR' : 'COVER'} ${hit.id} at ${hit.t.toFixed(2)} m` : 'nothing within range';
     this.pushLog(`${test ? 'Firing-line test' : 'Shot'} [${p.cover.state}] depth ${this.aim.selectedDepth.toFixed(2)}${offset >= 0 ? '+' : ''}${offset.toFixed(2)} → ${where}.`);
     return result;
@@ -711,6 +722,7 @@ export class World {
         aimPoint: mode === 'developer' ? this.aimPoint(offset) : null,
       },
       staticLit: this.staticLit,
+      message: this.message && this.simTime - this.message.simTime < 2.5 ? this.message.text : null,
       dev:
         mode === 'developer'
           ? {

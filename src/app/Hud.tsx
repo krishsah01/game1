@@ -59,6 +59,11 @@ export function Hud({ p }: { p: Presentation }) {
           <span className="big">{pl.ammo}</span>
           <span className="small">/ {MAGAZINE_SIZE}</span>
         </div>
+        {p.message && (
+          <div className="hud-row">
+            <span className="hud-v amber">{p.message}</span>
+          </div>
+        )}
         <div className="hud-row">
           <span className="hud-k">AIM DEPTH</span>
           <span className="hud-v accent">

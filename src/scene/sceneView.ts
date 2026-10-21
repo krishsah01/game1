@@ -56,8 +56,10 @@ export interface FrameOptions {
   showZones: boolean;
 }
 
-const VIEW_HEIGHT = 8.6;
-const VIEW_CENTER_Y = 3.15;
+const VIEW_HEIGHT = 6.8;
+const VIEW_CENTER_Y = 2.5;
+/** Fraction of the half-width the follow camera leads in the facing direction. */
+const FOLLOW_LEAD = 0.42;
 const CYAN = 0x5fd3ff;
 const AMBER = 0xffb454;
 const DIM_TARGET = new Color(0x2c3035);
@@ -148,8 +150,8 @@ export class SceneView {
     this.scene.add(this.staticGroup, this.decorGroup, this.dynamicGroup, this.overlayGroup, this.smokeGroup, this.colliderWire, this.zoneGroup);
 
     // Lights: hemisphere fill + one shadow-casting key from the front-top-left.
-    this.scene.add(new HemisphereLight(0x9aa6b4, 0x26262a, 0.75));
-    const key = new DirectionalLight(0xe6edf5, 1.35);
+    this.scene.add(new HemisphereLight(0xaab4c0, 0x2c2c2e, 1.15));
+    const key = new DirectionalLight(0xe6edf5, 1.6);
     key.position.set(-6, 14, 18);
     key.target.position.set(0, 0, -2);
     key.castShadow = true;
@@ -276,7 +278,9 @@ export class SceneView {
         color = 0x2b3037;
         break;
       case 'ceiling':
-        return; // rendered as beams in decor (collider still active)
+        geometry = new BoxGeometry(b.size.x, b.size.y, b.size.z);
+        color = 0x24272a;
+        break;
       default:
         geometry = new BoxGeometry(b.size.x, b.size.y, b.size.z);
         color = 0x55575a;
@@ -301,14 +305,14 @@ export class SceneView {
       this.staticGroup.add(edges);
     }
     if (c.visualRole === 'terminal') {
-      const screenMat = new MeshStandardMaterial({ color: 0x1b3b66, emissive: 0x2f7bff, emissiveIntensity: 1.2, roughness: 0.4 });
-      const screen = new Mesh(new BoxGeometry(b.size.x * 0.7, b.size.y * 0.45, 0.03), screenMat);
+      const screenMat = new MeshStandardMaterial({ color: 0x14243a, emissive: 0x2f7bff, emissiveIntensity: 0.7, roughness: 0.4 });
+      const screen = new Mesh(new BoxGeometry(b.size.x * 0.55, b.size.y * 0.3, 0.03), screenMat);
       screen.position.set(b.center.x, b.center.y + b.size.y * 0.12, b.center.z + b.size.z / 2 + 0.02);
       this.staticGroup.add(screen);
       this.terminalScreen = screenMat;
     }
     const base = new Color(color);
-    const dim = base.clone().multiplyScalar(0.5).lerp(DIM_TARGET, 0.4);
+    const dim = base.clone().multiplyScalar(0.55).lerp(DIM_TARGET, 0.45);
     this.statics.push({ id: c.id, mesh, base, dim, lit: 1, materials });
 
     // Developer collider wireframe.
@@ -341,7 +345,7 @@ export class SceneView {
       const fixture = new Mesh(new BoxGeometry(0.7, 0.08, 0.22), new MeshStandardMaterial({ color: 0xffe3bd, emissive: 0xffc890, emissiveIntensity: 2.2 }));
       fixture.position.set(x, 4.6, -1.2);
       mark(fixture);
-      const light = new PointLight(0xffc48a, 14, 10, 2);
+      const light = new PointLight(0xffd6b0, 6, 9, 2);
       light.position.set(x, 4.3, -0.8);
       mark(light);
     }
@@ -457,13 +461,13 @@ export class SceneView {
     const dev = opts.mode === 'developer';
 
     // Camera follow (translation only, clamped to the room).
-    const target = followCenterX(p.player.position.x, this.seed.roomMinX, this.seed.roomMaxX, this.halfWidth());
-    this.followX += (target - this.followX) * (1 - Math.exp(-dt / 0.25));
+    const target = followCenterX(p.player.position.x + p.player.facingX * FOLLOW_LEAD * this.halfWidth(), this.seed.roomMinX, this.seed.roomMaxX, this.halfWidth());
+    this.followX += (target - this.followX) * (1 - Math.exp(-dt / 0.45));
     fitOrthographic(this.camera, this.width / this.height, VIEW_HEIGHT, this.followX, VIEW_CENTER_Y);
 
     // Static readability.
     for (const s of this.statics) {
-      const want = 0.32 + 0.68 * (p.staticLit.get(s.id) ?? 0);
+      const want = 0.42 + 0.58 * (p.staticLit.get(s.id) ?? 0);
       s.lit += (want - s.lit) * (1 - Math.exp(-dt / 0.3));
       for (const m of s.materials) m.color.copy(s.dim).lerp(s.base, s.lit);
     }
@@ -558,7 +562,7 @@ export class SceneView {
       const o = p.objective;
       const c = o.status === 'SECURED' ? 0x37d67a : o.status === 'CONTESTED' ? 0xff9a3c : o.status === 'CAPTURING' ? 0x5fd3ff : 0x2f7bff;
       this.terminalScreen.emissive.set(c);
-      this.terminalScreen.emissiveIntensity = o.status === 'CAPTURING' ? 1.2 + 0.5 * Math.sin(this.wallClock * 6) : 1.1;
+      this.terminalScreen.emissiveIntensity = o.status === 'CAPTURING' ? 0.7 + 0.35 * Math.sin(this.wallClock * 6) : 0.7;
       const cb = this.seed.captureBounds;
       const pct = Math.round(o.progress * 100);
       const text = o.status === 'SECURED' ? 'CONTROL SECURED' : o.status === 'CONTESTED' ? 'CONTESTED' : o.status === 'CAPTURING' ? `CAPTURING ${pct}%` : o.status === 'PAUSED' ? `PAUSED ${pct}%` : 'CONTROL A';
@@ -570,7 +574,7 @@ export class SceneView {
     for (const { record, age } of p.lastKnown) {
       const id = `lk-${record.entityId}`;
       keepLk.add(id);
-      const h = this.labels.upsert(id, 'lastknown', `LAST SEEN ${Math.floor(age)}s`, { x: record.position.x, y: 0, z: record.position.z }, 0, -6, depthWord(record.position.z));
+      const h = this.labels.upsert(id, 'lastknown', `LAST SEEN ${Math.floor(age)}s`, { x: record.position.x, y: 0, z: record.position.z }, 0, -22, depthWord(record.position.z));
       const fade = Math.max(0.25, 1 - age / Math.max(1, p.config.lastKnownSeconds));
       h.el.style.opacity = fade.toFixed(2);
     }

@@ -177,9 +177,20 @@ function Lab({ choice }: { choice: TransportChoice }) {
             {p && <Hud p={p} />}
             {state.phase === 'loading' && <div className="loading">Loading scenario…</div>}
             {state.phase === 'error' && !state.scenario && <div className="loading error">Could not load a scenario. {state.error}</div>}
+          </div>
+          <div className="understage">
             {mode === 'developer' && <TopView controller={controller} />}
-            {tour.active && state.scenario && currentKind && (
+            {tour.active && state.scenario && currentKind ? (
               <Tour index={tour.index} total={scenarios.length} title={state.scenario.title} description={state.scenario.description} hint={TOUR_HINTS[currentKind]} onPrev={() => tourGo(tour.index - 1)} onNext={() => tourGo(tour.index + 1)} onExit={() => setTour({ active: false, index: 0 })} />
+            ) : (
+              state.scenario &&
+              currentKind && (
+                <div className="hint-card">
+                  <strong>{state.scenario.title}</strong>
+                  <p>{state.scenario.description}</p>
+                  <p className="hint">Try: {TOUR_HINTS[currentKind]}</p>
+                </div>
+              )
             )}
           </div>
           <Gallery open={galleryOpen} onToggle={() => setGalleryOpen((o) => !o)} />

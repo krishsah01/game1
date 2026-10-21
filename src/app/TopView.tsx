@@ -29,8 +29,8 @@ export function TopView({ controller }: { controller: SessionController }) {
       if (!world) return;
       const p = world.snapshot('developer');
       const scene = p.scene;
-      // Window: 18 m wide around the player.
-      const halfSpan = 9;
+      // Window: 20 m wide around the player.
+      const halfSpan = 10;
       const cx = Math.min(scene.roomMaxX - halfSpan, Math.max(scene.roomMinX + halfSpan, p.player.position.x));
       const xMin = cx - halfSpan;
       const sx = w / (halfSpan * 2);
@@ -158,7 +158,7 @@ export function TopView({ controller }: { controller: SessionController }) {
   return (
     <div className="topview">
       <div className="topview-title">DEVELOPER VIEW — OMNISCIENT · top view (X/Z), not the gameplay camera</div>
-      <canvas ref={ref} width={360} height={110} />
+      <canvas ref={ref} width={640} height={190} />
     </div>
   );
 }

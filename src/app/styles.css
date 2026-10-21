@@ -144,11 +144,11 @@ code {
 }
 .main {
   display: grid;
-  grid-template-columns: 190px minmax(0, 1fr) 330px;
+  grid-template-columns: 170px minmax(0, 1fr) 320px;
   min-height: 0;
 }
 .inspector-collapsed .main {
-  grid-template-columns: 190px minmax(0, 1fr);
+  grid-template-columns: 170px minmax(0, 1fr);
 }
 .scenarios {
   border-right: 1px solid var(--line);
@@ -173,12 +173,40 @@ code {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  overflow: auto;
+  background: #0d0f11;
+}
+.understage {
+  display: flex;
+  gap: 10px;
+  padding: 8px 10px;
+  align-items: stretch;
+  min-height: 0;
+}
+.understage > * {
+  min-width: 0;
+}
+.hint-card {
+  flex: 1;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: var(--panel);
+  font-size: 12.5px;
+}
+.hint-card p {
+  margin: 4px 0;
+}
+.hint-card .hint {
+  color: var(--amber);
 }
 .stage-wrap {
   position: relative;
-  flex: 1;
-  min-height: 0;
+  width: min(100%, calc((100vh - 190px) * 16 / 9));
+  aspect-ratio: 16 / 9;
+  margin: 0 auto;
   background: #101316;
+  flex: none;
 }
 .stage {
   position: absolute;
@@ -518,8 +546,8 @@ code {
 .pulse {
   position: absolute;
   top: 50%;
-  width: 90px;
-  height: 260px;
+  width: 130px;
+  height: 320px;
   transform: translateY(-50%);
   pointer-events: none;
   opacity: 0;
@@ -534,8 +562,9 @@ code {
 .pulse span {
   position: absolute;
   inset: 0;
-  border: 2px dashed var(--amber);
+  border: 3px dashed var(--amber);
   border-radius: 50%;
+  box-shadow: 0 0 12px rgba(255, 180, 84, 0.35);
 }
 .pulse span:nth-child(2) {
   inset: 30px;
@@ -544,12 +573,10 @@ code {
   inset: 60px;
 }
 
-/* top view inset */
+/* top view inset (below the stage, never over the gameplay camera) */
 .topview {
-  position: absolute;
-  right: 12px;
-  top: 60px;
-  width: 360px;
+  width: 46%;
+  flex: none;
   border: 1px solid rgba(255, 95, 168, 0.5);
   background: rgba(16, 19, 22, 0.9);
 }
@@ -563,19 +590,15 @@ code {
 }
 .topview canvas {
   display: block;
-  width: 360px;
-  height: 110px;
+  width: 100%;
+  height: auto;
 }
 
 /* tour */
 .tour {
-  position: absolute;
-  left: 50%;
-  bottom: 44px;
-  transform: translateX(-50%);
-  width: min(640px, 92%);
+  flex: 1;
   background: rgba(22, 26, 30, 0.95);
-  border: 1px solid var(--line);
+  border: 1px solid var(--cyan);
   border-radius: 6px;
   padding: 10px 14px;
 }
@@ -798,8 +821,7 @@ code {
     border-bottom: 1px solid var(--line);
   }
   .stage-wrap {
-    aspect-ratio: 16 / 9;
-    flex: none;
+    width: 100%;
   }
   .inspector {
     border-left: none;
@@ -812,11 +834,10 @@ code {
   .legend {
     display: none;
   }
-  .topview {
-    width: 220px;
+  .understage {
+    flex-direction: column;
   }
-  .topview canvas {
-    width: 220px;
-    height: 68px;
+  .topview {
+    width: 100%;
   }
 }
