@@ -29,6 +29,8 @@ export default defineConfig({
     target: 'es2022',
     sourcemap: false,
     chunkSizeWarningLimit: 1400,
+    // VITE_INLINE_ASSETS=1 embeds the reference boards as data URIs for a single-file static bundle.
+    assetsInlineLimit: process.env.VITE_INLINE_ASSETS ? 8_000_000 : 4096,
   },
   test: {
     include: ['tests/**/*.test.ts'],
