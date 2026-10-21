@@ -32,7 +32,7 @@ export function Help({ onClose }: { onClose: () => void }) {
             </tr>
             <tr>
               <td>F (hold)</td>
-              <td>Observe above cover: eyes clear, muzzle stays blocked</td>
+              <td>Observe above cover: eyes clear, muzzle stays blocked. Off the lane behind full-height depth cover, peek: the head leans out around its edge toward the lane, the body and rifle stay behind it</td>
             </tr>
             <tr>
               <td>Right mouse (hold)</td>

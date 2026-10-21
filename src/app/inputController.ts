@@ -6,7 +6,7 @@
  * Keys (prototype v0.2):
  *   A / D, ← →   move          W / ↑  go FAR (far edge of the depth zone)
  *   S / ↓        back to lane  Space  vault the obstacle ahead
- *   C crouch · Z prone · F (hold) observe · RMB (hold) aim · LMB fire
+ *   C crouch · Z prone · F (hold) observe / peek · RMB (hold) aim · LMB fire
  *   Tab cycles walk → combat → sprint · Q / E aim depth · B brace
  *   V developer view · P pause · . step · R reload · Esc help
  */

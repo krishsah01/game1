@@ -40,7 +40,7 @@ Other commands:
 | Command | Purpose |
 | --- | --- |
 | `npm run typecheck` | strict TypeScript check of app, server, tests and scripts |
-| `npm test` | 75 focused vitest tests (geometry, cover, visibility, recon, aiming, shots, movement, stance/vault/arm-aim, objective, GraphQL contract, session controller, camera projection) |
+| `npm test` | 82 focused vitest tests (geometry, cover, depth-cover peek, visibility, recon, aiming, shots, movement, stance/vault/arm-aim, objective, GraphQL contract, session controller, camera projection) |
 | `npm run build` | production build into `dist/` |
 | `npm run preview` | serves `dist/` on http://127.0.0.1:4173 **with** the API (`vite preview` proxies `/graphql` to the Yoga server it starts alongside) |
 | `npm run check` | typecheck + tests + build |
@@ -87,6 +87,10 @@ presentations of the same simulation.
 - **Arms follow the aim point.** The rifle swings around a per-stance pivot by the pitch from the pivot to the pointer (clamped: ±70° standing, 65°/60° crouched, 25°/8° prone). The mechanical muzzle anchor moves with the visible barrel tip, so the firing line starts where the barrel ends. Hidden and observe keep the rifle lowered. A barrel that would enter a solid is pulled back to that face (`muzzleClamped`), so a rifle pressed against cover can no longer fire from inside it.
 - **Keys moved to make room:** `F` (hold) observes over cover (was Space); `Tab` cycles walk → combat → sprint (was 1/2/3).
 
+### New in prototype v0.2.1 (Linear 2DS-3)
+
+- **Peek from depth cover with the observe key.** Off the lane (FAR in a depth zone) with full-height cover directly ahead, such as the far jamb at station C, the body is in *depth cover* and the HUD offers `F peek`. Holding `F` leans the head toward the lane until the eye clears the cover's lane-side edge by 0.10 m (at most 1.0 m of lean; cover whose edge is farther away is not depth cover). Only the eye and the head sample move: the body collider stays put and the rifle stays lowered behind the cover, so the firing line still ends on the jamb, the same split as observe over a low wall. Standing or crouched, not prone; moving or aiming cancels it. The lean is stopped short of any solid the head would enter. Tuning: `PEEK` in `src/shared/tuning.ts`.
+
 Mechanics (all in plain TypeScript under `src/simulation/`, independent of
 React and Three.js):
 
@@ -131,7 +135,7 @@ React and Three.js):
 | Tab | cycle walk (quiet) → combat move (moderate) → sprint (loud, unstable; cancels brace and aim) |
 | C | toggle crouch (crouched at waist-high cover = hidden); from prone, rise to a crouch |
 | Z | toggle prone (slow crawl, lowest profile, steadiest aim, cannot vault) |
-| F (hold) | observe above cover |
+| F (hold) | observe above waist-high cover; off the lane behind full-height depth cover, peek around its edge toward the lane |
 | Right mouse (hold) | aim; from crouched cover: aim over |
 | Left mouse | fire (disabled while hidden or vaulting) |
 | Mouse height | the arms and rifle swing toward the pointer; the shot leaves the barrel tip |
@@ -204,8 +208,8 @@ Then `src/shared/scenarios.ts` (the map and presets), `server/resolvers.ts`
 
 ## 7. Acceptance results
 
-Automated evidence is `npm test` (75 tests, all passing at the time of
-writing) and the headless walkthrough `npm run screenshots` (29 frames in
+Automated evidence is `npm test` (82 tests, all passing at the time of
+writing) and the headless walkthrough `npm run screenshots` (32 frames in
 `docs/screenshots/`, 0 console or page errors). Manual checks were done in
 headless Chromium with SwiftShader WebGL.
 
@@ -265,6 +269,14 @@ headless Chromium with SwiftShader WebGL.
 | Vault (Space) over flagged full-depth walls; head exposed mid-vault, no firing, lands beyond; refused when prone, nothing ahead or landing blocked | verified | `tests/stance-vault.test.ts`; screenshots 10b, 10c |
 | Both vaultable walls span the entire depth axis and are served with `isVaultable` over GraphQL | verified | `tests/stance-vault.test.ts`, `tests/api.test.ts` |
 | Arms follow the aim point; muzzle = barrel tip; stance pitch limits; hidden/observe lowered; muzzle never inside a solid | verified | `tests/stance-vault.test.ts`; screenshot 10d |
+
+### Prototype v0.2.1 (2DS-3)
+
+| Item | Result | Evidence |
+| --- | --- | --- |
+| FAR behind the station-C far jamb counts as depth cover; target unseen, player unexposed | verified | `tests/peek.test.ts`; screenshot 11a |
+| Hold F in depth cover peeks: eye leans past the jamb edge, target observed, only the head exposed, body and muzzle stay behind the jamb (firing line ends on it) | verified | `tests/peek.test.ts`; screenshots 11b, 11c |
+| Releasing F, aiming or moving ends the peek; works standing and crouched, not prone; no depth cover on the lane; observe over low walls unchanged | verified | `tests/peek.test.ts` |
 
 ### GraphQL and application state
 

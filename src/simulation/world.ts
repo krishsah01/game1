@@ -778,7 +778,10 @@ export class World {
       fovDegrees: 360,
       range: 60,
     };
-    const samples = actorSamples(p.position, p.cover.anchors.height);
+    // A peek leans the head (only) around the edge of depth cover.
+    const samples = actorSamples(p.position, p.cover.anchors.height).map((s) =>
+      s.name === 'head' && p.cover.peekLean !== 0 ? { ...s, point: { ...s.point, z: s.point.z + p.cover.peekLean } } : s,
+    );
     const obs = observeEntity(observer, { id: 'player', samples }, this.sightBlockers, smokeBox);
     p.exposure = obs.samples.map((s) => ({ name: s.name, exposed: s.reason === 'clear' }));
   }

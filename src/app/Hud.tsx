@@ -6,7 +6,7 @@
 import { MAGAZINE_SIZE } from '../shared/tuning.ts';
 import type { Presentation } from '../simulation/world.ts';
 
-const COVER_LABEL: Record<string, string> = { none: '—', hidden: 'HIDDEN', observe: 'OBSERVE', aimOver: 'AIM OVER' };
+const COVER_LABEL: Record<string, string> = { none: '—', hidden: 'HIDDEN', observe: 'OBSERVE', aimOver: 'AIM OVER', peek: 'PEEK' };
 
 export function Hud({ p }: { p: Presentation }) {
   const pl = p.player;
@@ -22,6 +22,7 @@ export function Hud({ p }: { p: Presentation }) {
           <span className="hud-v">{pl.stance === 'CROUCHED' ? 'CROUCH' : pl.stance === 'PRONE' ? 'PRONE' : 'STAND'}</span>
           {pl.vaultProgress !== null && <span className="hud-v amber">VAULT</span>}
           {pl.cover.state !== 'none' && <span className="hud-v accent">{COVER_LABEL[pl.cover.state]}</span>}
+          {pl.cover.state === 'none' && pl.cover.depthCover && <span className="hud-v">DEPTH COVER · F peek</span>}
           {pl.braced && <span className="hud-v amber">BRACED</span>}
           {pl.cover.aiming && pl.cover.state === 'none' && <span className="hud-v accent">ADS</span>}
         </div>
@@ -87,7 +88,7 @@ export function Hud({ p }: { p: Presentation }) {
         <span>Space vault</span>
         <span>C crouch</span>
         <span>Z prone</span>
-        <span>F observe</span>
+        <span>F observe / peek</span>
         <span>RMB aim</span>
         <span>LMB fire</span>
         <span>Q/E aim depth</span>

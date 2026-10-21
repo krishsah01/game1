@@ -152,7 +152,8 @@ export function Inspector({ controller, state, p, mode, devOptions, onDevOptions
               <tr>
                 <td>State</td>
                 <td>
-                  {pl.cover.state} {pl.coverId ? `(at ${pl.coverId})` : ''}
+                  {pl.cover.state} {pl.coverId ? `(at ${pl.coverId})` : pl.cover.depthCover ? `(depth cover ${pl.cover.depthCover.id})` : ''}
+                  {pl.cover.peekLean !== 0 ? ` · lean ${pl.cover.peekLean.toFixed(2)} m` : ''}
                 </td>
               </tr>
               <tr>

@@ -481,8 +481,8 @@ export class SceneView {
     const pl = p.player;
     this.player.group.position.set(pl.position.x, pl.position.y, pl.position.z);
     this.player.setTarget(pl.cover.anchors);
-    // Arms and rifle follow the mechanical aim pitch; the body tucks while vaulting.
-    this.player.setPose({ aimPitch: pl.cover.aimPitch, vaultProgress: pl.vaultProgress });
+    // Arms and rifle follow the mechanical aim pitch; the body tucks while vaulting; the head leans out on a peek.
+    this.player.setPose({ aimPitch: pl.cover.aimPitch, vaultProgress: pl.vaultProgress, peekLean: pl.cover.peekLean });
     this.player.update(dt, pl.facingX, pl.moving, pl.moveMode === 'SPRINT' && pl.stance !== 'PRONE');
     this.player.setOutline(false);
     const keepLabels = new Set<string>();
