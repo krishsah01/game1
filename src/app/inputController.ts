@@ -32,6 +32,8 @@ export class InputController {
   pointerInside = false;
   pointerClient = { x: 0, y: 0 };
   private keys = new Set<string>();
+  /** Mouse buttons currently down (PointerEvent.buttons bitmask: 1 left, 2 right). */
+  private buttons = 0;
   private detachFns: (() => void)[] = [];
 
   constructor(
@@ -71,6 +73,8 @@ export class InputController {
     onCanvas('pointermove', (ev) => {
       this.pointerInside = true;
       this.pointerClient = { x: ev.clientX, y: ev.clientY };
+      // A second button pressed or released while another is held arrives as a pointermove (chorded buttons).
+      this.syncButtons(ev.buttons, ev.button);
     });
     onCanvas('pointerenter', (ev) => {
       this.pointerInside = true;
@@ -79,6 +83,7 @@ export class InputController {
     onCanvas('pointerleave', () => {
       this.pointerInside = false;
       this.held.aim = false;
+      this.buttons = 0;
       if (document.activeElement !== this.canvas) {
         // Hover-only ownership ends here: drop keys held via hover.
         this.keys.clear();
@@ -89,16 +94,10 @@ export class InputController {
     onCanvas('pointerdown', (ev) => {
       this.canvas.focus({ preventScroll: true });
       this.pointerClient = { x: ev.clientX, y: ev.clientY };
-      if (ev.button === 2) {
-        this.held.aim = true;
-        ev.preventDefault();
-      } else if (ev.button === 0) {
-        this.callbacks.onFire();
-      }
+      if (ev.button === 2) ev.preventDefault();
+      this.syncButtons(ev.buttons, ev.button);
     });
-    onCanvas('pointerup', (ev) => {
-      if (ev.button === 2) this.held.aim = false;
-    });
+    onCanvas('pointerup', (ev) => this.syncButtons(ev.buttons, ev.button));
     onCanvas('contextmenu', (ev) => ev.preventDefault());
     onCanvas('blur', () => {
       // Keyboard-held states should not stick when focus moves to a control.
@@ -189,6 +188,22 @@ export class InputController {
     }
   }
 
+  /**
+   * Mouse buttons from the `buttons` bitmask. Browsers send pointerdown/pointerup
+   * only for the first press and the last release; a left click while the
+   * right button is held (aim) shows up only as a pointermove whose `buttons`
+   * gained the left bit. Tracking the bitmask catches that: right held = aim,
+   * left newly pressed = fire. `changed` is the event's `button` (-1 for plain
+   * movement), so re-entering the canvas with the left button already held
+   * never fires.
+   */
+  private syncButtons(buttons: number, changed: number): void {
+    const pressed = buttons & ~this.buttons;
+    this.buttons = buttons;
+    this.held.aim = (buttons & 2) !== 0;
+    if (pressed & 1 && changed === 0) this.callbacks.onFire();
+  }
+
   private recomputeAxes(): void {
     const left = this.keys.has('a') || this.keys.has('ArrowLeft');
     const right = this.keys.has('d') || this.keys.has('ArrowRight');
@@ -201,6 +216,7 @@ export class InputController {
     this.held.moveX = 0;
     this.held.observe = false;
     this.held.aim = false;
+    this.buttons = 0;
     if (notify) this.callbacks.onFocusLost();
   }
 
