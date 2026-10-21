@@ -9,7 +9,7 @@
  *
  * Depth is world Z throughout (see shared/types.ts).
  */
-import { aabbFromBounds, aabbFromCenterSize, type Aabb } from '../shared/geometry.ts';
+import { aabbFromBounds, aabbFromCenterSize, add, scale, type Aabb } from '../shared/geometry.ts';
 import {
   ACTOR_HEIGHT,
   BODY_DEPTH,
@@ -20,6 +20,7 @@ import {
   MAGAZINE_SIZE,
   MAX_FRAME_DELTA,
   MOVE_SPEED,
+  SHOT_MAX_RANGE,
   depthWord,
   type StanceAnchors,
 } from '../shared/tuning.ts';
@@ -77,6 +78,10 @@ export interface Tracer {
   hitLabel: string;
   /** Whether the hit actor was observed at the moment of the shot. */
   hitObserved: boolean;
+  /** What the player may know about the outcome: the real hit, or the static obstruction beyond an unobserved actor. */
+  publicKind: 'collider' | 'actor' | 'none';
+  publicId: string | null;
+  publicLabel: string;
   sampledOffset: number;
   test: boolean;
 }
@@ -185,6 +190,7 @@ export class World {
   private readonly sightBlockers: SightBlocker[];
   private readonly staticShotTargets: ShotTarget[];
   private readonly coverCands: CoverCandidate[];
+  private readonly solidBoxes: Aabb[];
 
   constructor(scenario: Scenario, session: Pick<DemoSession, 'config' | 'seed'>) {
     this.scenario = scenario;
@@ -195,6 +201,7 @@ export class World {
     this.sightBlockers = sightBlockersFromColliders(this.scene.colliders);
     this.staticShotTargets = shotTargetsFromColliders(this.scene.colliders);
     this.coverCands = coverCandidates(this.scene.colliders);
+    this.solidBoxes = this.staticShotTargets.map((t) => t.box);
     this.reset();
   }
 
@@ -228,7 +235,7 @@ export class World {
     this.cameraSight = [];
     const position = { ...playerSeed.position };
     const cover = evaluateCover(
-      { position, facingX: playerSeed.facingX, stance: playerSeed.stance, moving: false, observeHeld: false, aimHeld: false, sprinting: false },
+      { position, facingX: playerSeed.facingX, stance: playerSeed.stance, moving: false, observeHeld: false, aimHeld: false, sprinting: false, solids: this.solidBoxes },
       this.coverCands,
     );
     this.player = {
@@ -444,7 +451,7 @@ export class World {
 
     // ---- 3. cover + anchors ---------------------------------------------
     p.cover = evaluateCover(
-      { position: p.position, facingX: p.facingX, stance: p.stance, moving: p.moving, observeHeld, aimHeld, sprinting: sprintMode && p.moving },
+      { position: p.position, facingX: p.facingX, stance: p.stance, moving: p.moving, observeHeld, aimHeld, sprinting: sprintMode && p.moving, solids: this.solidBoxes },
       this.coverCands,
     );
     if (!p.cover.braceable) p.braced = false;
@@ -627,7 +634,10 @@ export class World {
     }
     const hit = result.hit;
     const hitObserved = hit?.kind === 'actor' ? (this.knowledge.observations.get(hit.id)?.observed ?? false) : false;
-    const publicEnd = hit && hit.kind === 'actor' && !hitObserved ? (result.staticHit ? result.staticHit.point : result.end) : result.end;
+    const hiddenActor = hit?.kind === 'actor' && !hitObserved;
+    // The player may only learn what a shot would have told them without the hidden body on the line.
+    const publicHit = hiddenActor ? result.staticHit : hit;
+    const publicEnd = hiddenActor ? (result.staticHit ? result.staticHit.point : add(result.origin, scale(result.direction, SHOT_MAX_RANGE))) : result.end;
     const tracer: Tracer = {
       id: this.nextTracerId++,
       simTime: this.simTime,
@@ -638,6 +648,9 @@ export class World {
       hitId: hit ? hit.id : null,
       hitLabel: hit ? hit.label : 'no hit within range',
       hitObserved,
+      publicKind: publicHit ? publicHit.kind : 'none',
+      publicId: publicHit ? publicHit.id : null,
+      publicLabel: publicHit ? publicHit.label : 'no hit within range',
       sampledOffset: offset,
       test,
     };
@@ -646,9 +659,10 @@ export class World {
       const a = this.actors.find((x) => x.id === hit.id);
       if (a) a.hitFlashUntil = this.simTime + 0.25;
     }
-    if (test) this.message = { text: hit ? `FIRING LINE · ${hit.kind === 'actor' ? 'clear to target' : `blocked by ${hit.label}`}` : 'FIRING LINE · clear', simTime: this.simTime };
-    else if (hit?.kind === 'actor' && hitObserved) this.message = { text: 'HIT', simTime: this.simTime };
-    else if (hit?.kind === 'collider') this.message = { text: `IMPACT · ${hit.label}`, simTime: this.simTime };
+    // Feedback is derived from the public outcome so an unseen body never changes what the player sees.
+    if (test) this.message = { text: publicHit ? `FIRING LINE · ${publicHit.kind === 'actor' ? 'clear to target' : `blocked by ${publicHit.label}`}` : 'FIRING LINE · clear', simTime: this.simTime };
+    else if (publicHit?.kind === 'actor') this.message = { text: 'HIT', simTime: this.simTime };
+    else if (publicHit?.kind === 'collider') this.message = { text: `IMPACT · ${publicHit.label}`, simTime: this.simTime };
     const where = hit ? `${hit.kind === 'actor' ? 'ACTOR' : 'COVER'} ${hit.id} at ${hit.t.toFixed(2)} m` : 'nothing within range';
     this.pushLog(`${test ? 'Firing-line test' : 'Shot'} [${p.cover.state}] depth ${this.aim.selectedDepth.toFixed(2)}${offset >= 0 ? '+' : ''}${offset.toFixed(2)} → ${where}.`);
     return result;
@@ -690,6 +704,8 @@ export class World {
       config: this.config,
       player: {
         ...p,
+        // Exposure is computed from an opposing eye and is developer information.
+        exposure: mode === 'developer' ? p.exposure : [],
         noiseLabel: playerNoiseLabel(p.moving, p.moveMode),
         zoneLabel: p.zone?.label ?? null,
         coverId: p.cover.nearCover?.id ?? null,
@@ -697,7 +713,11 @@ export class World {
       entities,
       lastKnown: k.lastKnown.map((record) => ({ record, age: this.simTime - record.simTime })),
       pulses: this.noise.pulses.map((pulse) => ({ pulse, age: this.simTime - pulse.simTime })),
-      tracers: this.tracers.map((tracer) => ({ tracer, age: this.simTime - tracer.simTime })),
+      tracers: this.tracers.map((tracer) => ({
+        // Player mode only ever carries the public outcome of a shot.
+        tracer: mode === 'developer' ? tracer : { ...tracer, trueEnd: tracer.publicEnd, hitKind: tracer.publicKind, hitId: tracer.publicId, hitLabel: tracer.publicLabel },
+        age: this.simTime - tracer.simTime,
+      })),
       objective: { ...this.objective },
       camera: {
         id: this.recon.seed.id,

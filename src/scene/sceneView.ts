@@ -81,6 +81,8 @@ interface ActorEntry {
   lastSeenFrame: number;
   fadeStart: number | null;
   frozenAt: Vector3;
+  /** True when the entry was last drawn as an observed entity (only those may fade out). */
+  wasObserved: boolean;
 }
 
 function disposeObject(obj: Object3D): void {
@@ -492,6 +494,7 @@ export class SceneView {
       if (!entry) entry = this.createActor(e);
       entry.lastSeenFrame = this.frameIndex;
       entry.fadeStart = null;
+      entry.wasObserved = e.observed;
       entry.object.visible = true;
       entry.object.position.set(e.position.x, e.position.y, e.position.z);
       if (entry.soldier) {
@@ -518,7 +521,7 @@ export class SceneView {
         keepLabels.add(`depth-${e.id}`);
       }
       if (dev && e.observed) {
-        const src = e.sources.map((s) => (s === 'player' ? 'DIRECT' : s.toUpperCase())).join(' + ');
+        const src = e.sources.map((s) => (s === 'player' ? 'DIRECT' : s === p.camera.id ? p.camera.label : s.toUpperCase())).join(' + ');
         this.labels.upsert(`src-${e.id}`, 'source', src, { x: e.position.x, y: e.height + 0.5, z: e.position.z });
         keepLabels.add(`src-${e.id}`);
       }
@@ -526,6 +529,13 @@ export class SceneView {
     // Entities that just dropped out: brief frozen fade at the last observed transform, then hidden.
     for (const [id, entry] of this.actors) {
       if (present.has(id)) continue;
+      if (!entry.wasObserved) {
+        // A developer-view ghost (or an entry that was never observed) must vanish at once.
+        entry.object.visible = false;
+        entry.fadeStart = null;
+        entry.soldier?.setGhost(false);
+        continue;
+      }
       if (entry.fadeStart === null) {
         entry.fadeStart = this.wallClock;
         entry.frozenAt.copy(entry.object.position);
@@ -633,9 +643,9 @@ export class SceneView {
       marker.rotation.x = Math.PI;
       marker.position.y = 2.05;
       soldier.group.add(marker);
-      entry = { kind: e.kind, object: soldier.group, soldier, marker, lastSeenFrame: 0, fadeStart: null, frozenAt: new Vector3() };
+      entry = { kind: e.kind, object: soldier.group, soldier, marker, lastSeenFrame: 0, fadeStart: null, frozenAt: new Vector3(), wasObserved: false };
     } else {
-      entry = { kind: e.kind, object: makeBag(), soldier: null, marker: null, lastSeenFrame: 0, fadeStart: null, frozenAt: new Vector3() };
+      entry = { kind: e.kind, object: makeBag(), soldier: null, marker: null, lastSeenFrame: 0, fadeStart: null, frozenAt: new Vector3(), wasObserved: false };
     }
     this.dynamicGroup.add(entry.object);
     this.actors.set(e.id, entry);

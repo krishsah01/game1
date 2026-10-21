@@ -50,8 +50,7 @@ export function resolveShot(muzzle: Vec3, aimPoint: Vec3, targets: ShotTarget[],
   for (const target of targets) {
     const r = rayAabb(muzzle, dir, target.box, maxRange);
     if (!r) continue;
-    // Ignore boxes the muzzle starts inside (should not happen: anchors are kept outside solids).
-    if (r.tEntry <= 1e-6 && r.tExit > 0 && target.kind === 'collider') continue;
+    // A box that already contains the muzzle (tEntry 0) is an immediate obstruction, never skipped.
     const hit: ShotHit = { kind: target.kind, id: target.id, label: target.label, t: r.tEntry, point: add(muzzle, scale(dir, r.tEntry)) };
     if (!best || r.tEntry < best.t) best = hit;
     if (target.kind === 'collider' && (!bestStatic || r.tEntry < bestStatic.t)) bestStatic = hit;

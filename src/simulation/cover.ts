@@ -87,6 +87,33 @@ export interface CoverInputs {
   observeHeld: boolean;
   aimHeld: boolean;
   sprinting: boolean;
+  /** Shot-blocking boxes used to keep the muzzle anchor outside solid geometry. */
+  solids?: Aabb[];
+}
+
+/** Minimum gap kept between the muzzle tip and a solid face ahead of the body. */
+const MUZZLE_CLEARANCE = 0.03;
+
+/**
+ * The rifle is up to 0.62 m ahead of the body centre while the body is only
+ * 0.25 m deep, so a body pressed against a wall would otherwise put its
+ * muzzle inside the wall. Shorten the forward offset so the tip stops just
+ * short of the nearest solid face at the muzzle's height and depth.
+ */
+export function clampMuzzleForward(position: Vec3, facingX: -1 | 1, anchors: StanceAnchors, solids: Aabb[]): number {
+  const muzzleY = position.y + anchors.muzzleY;
+  const bodyFront = position.x + (facingX * BODY_WIDTH) / 2;
+  let forward = anchors.muzzleForward;
+  for (const box of solids) {
+    if (muzzleY < box.min.y || muzzleY > box.max.y) continue;
+    if (position.z < box.min.z || position.z > box.max.z) continue;
+    const face = facingX > 0 ? box.min.x : box.max.x;
+    // Only boxes ahead of the body front count; collision keeps them from overlapping the body.
+    if (facingX > 0 ? box.max.x < bodyFront - 1e-6 : box.min.x > bodyFront + 1e-6) continue;
+    const allowed = facingX > 0 ? face - MUZZLE_CLEARANCE - position.x : position.x - (face + MUZZLE_CLEARANCE);
+    forward = Math.min(forward, Math.max(0.05, allowed));
+  }
+  return forward;
 }
 
 /**
@@ -119,6 +146,8 @@ export function evaluateCover(input: CoverInputs, candidates: CoverCandidate[]):
   }
 
   const f = input.facingX;
+  const muzzleForward = clampMuzzleForward(input.position, f, anchors, input.solids ?? []);
+  if (muzzleForward !== anchors.muzzleForward) anchors = { ...anchors, muzzleForward };
   const eye: Vec3 = { x: input.position.x + f * anchors.eyeForward, y: input.position.y + anchors.eyeY, z: input.position.z };
   const muzzle: Vec3 = { x: input.position.x + f * anchors.muzzleForward, y: input.position.y + anchors.muzzleY, z: input.position.z };
   return { state, nearCover, braceable, anchors, eye, muzzle, stance: input.stance, aiming };

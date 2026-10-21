@@ -31,7 +31,12 @@ npm run dev
 | http://127.0.0.1:4000/graphql | local GraphQL Yoga API, with GraphiQL in the browser |
 
 Both services bind to loopback only. The browser always talks to the
-same-origin `/graphql` URL.
+same-origin `/graphql` URL. Ports are strict: if 5173 or 4000 is already in
+use the command fails with a clear message instead of silently moving to
+another port (override with `API_PORT=4100 npm run dev`; the Vite proxy
+follows it). If the browser shows a 404 for `/`, check that you are running
+`npm run dev` in the folder that contains `index.html` and `package.json`,
+and that the terminal's `Local:` line shows the URL you opened.
 
 Other commands:
 
