@@ -15,6 +15,7 @@ import { chooseTransport, type TransportChoice } from './transportSetup.ts';
 export function App() {
   const [choice, setChoice] = useState<TransportChoice | null>(null);
   const [booting, setBooting] = useState(true);
+  const booted = useRef(false);
 
   const boot = useCallback(async (forceInProcess = false) => {
     setBooting(true);
@@ -24,6 +25,9 @@ export function App() {
   }, []);
 
   useEffect(() => {
+    // StrictMode mounts twice in development; probe the API once.
+    if (booted.current) return;
+    booted.current = true;
     void boot();
   }, [boot]);
 
@@ -65,15 +69,30 @@ function Lab({ choice }: { choice: TransportChoice }) {
   const [mode, setMode] = useState<ViewMode>('player');
   const [devOptions, setDevOptions] = useState<DevOptions>({ showRays: true, showColliders: false, showCones: true, showZones: true });
   const [help, setHelp] = useState(false);
-  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const [inspectorOpen, setInspectorOpen] = useState(() => typeof window === 'undefined' || window.innerWidth >= 1500);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [tour, setTour] = useState<{ active: boolean; index: number }>({ active: false, index: 0 });
   const p = useHudSnapshot(controller, mode);
   const helpRef = useRef(help);
   helpRef.current = help;
 
+  const initialised = useRef(false);
   useEffect(() => {
+    if (initialised.current) return; // StrictMode double-mount guard: one catalogue load, one session
+    initialised.current = true;
     void controller.loadCatalogue().then(() => controller.selectScenario('hidden-battlefield')).catch(() => undefined);
+  }, [controller]);
+
+  /** Retries whatever failed: the catalogue if it never loaded, otherwise the current (or first) scenario. */
+  const retry = useCallback(async () => {
+    const s = controller.getState();
+    try {
+      if (s.scenarios.length === 0) await controller.loadCatalogue();
+    } catch {
+      return;
+    }
+    const target = s.scenario?.id ?? controller.getState().scenarios[0]?.id;
+    if (target) await controller.selectScenario(target);
   }, [controller]);
 
   const openHelp = useCallback(() => {
@@ -151,7 +170,9 @@ function Lab({ choice }: { choice: TransportChoice }) {
           <button className={mode === 'developer' ? 'on' : ''} onClick={toggleDeveloper} title="V">
             {mode === 'developer' ? 'Developer view' : 'Player view'}
           </button>
-          <button onClick={startTour}>Guided tour</button>
+          <button onClick={startTour} disabled={state.mutating || scenarios.length === 0}>
+            Guided tour
+          </button>
           <button onClick={() => setInspectorOpen((o) => !o)}>{inspectorOpen ? 'Hide inspector' : 'Inspector'}</button>
           <button onClick={openHelp}>Help</button>
         </div>
@@ -169,7 +190,9 @@ function Lab({ choice }: { choice: TransportChoice }) {
             <div className="error small pad">
               {state.error}
               <div className="btn-row">
-                <button onClick={() => state.scenario && selectScenario(state.scenario.id)}>Retry</button>
+                <button onClick={() => void retry()} disabled={state.mutating || state.phase === 'loading'}>
+                  Retry
+                </button>
                 <button onClick={() => controller.dismissError()}>Dismiss</button>
               </div>
             </div>
@@ -187,7 +210,7 @@ function Lab({ choice }: { choice: TransportChoice }) {
           <div className="understage">
             {mode === 'developer' && <TopView controller={controller} />}
             {tour.active && state.scenario && currentKind ? (
-              <Tour index={tour.index} total={scenarios.length} title={state.scenario.title} description={state.scenario.description} hint={TOUR_HINTS[currentKind]} onPrev={() => tourGo(tour.index - 1)} onNext={() => tourGo(tour.index + 1)} onExit={() => setTour({ active: false, index: 0 })} />
+              <Tour index={tour.index} total={scenarios.length} title={state.scenario.title} description={state.scenario.description} hint={TOUR_HINTS[currentKind]} busy={state.mutating || state.phase === 'loading'} onPrev={() => tourGo(tour.index - 1)} onNext={() => tourGo(tour.index + 1)} onExit={() => setTour({ active: false, index: 0 })} />
             ) : (
               state.scenario &&
               currentKind && (

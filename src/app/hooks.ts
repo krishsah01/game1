@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { ApiClient, OperationRecord } from '../graphql/client.ts';
 import type { Presentation, ViewMode } from '../simulation/world.ts';
 import type { ControllerState, SessionController } from './sessionController.ts';
@@ -40,21 +40,28 @@ export function useHudSnapshot(controller: SessionController, mode: ViewMode, in
   return snap;
 }
 
-/** Debounced commit helper for sliders: local value updates immediately, commit fires after `delay` ms of quiet. */
+/**
+ * Debounced commit helper for sliders: the local value updates immediately and
+ * the commit fires after `delay` ms of quiet. The latest `commit` callback is
+ * kept in a ref so parent re-renders (the HUD re-renders ~11 times a second)
+ * never restart the timer.
+ */
 export function useDebouncedCommit<T>(value: T, commit: (v: T) => void, delay = 350): [T, (v: T) => void] {
   const [local, setLocal] = useState<T>(value);
   const [dirty, setDirty] = useState(false);
+  const commitRef = useRef(commit);
+  commitRef.current = commit;
   useEffect(() => {
     if (!dirty) setLocal(value);
   }, [value, dirty]);
   useEffect(() => {
     if (!dirty) return;
     const id = window.setTimeout(() => {
-      commit(local);
+      commitRef.current(local);
       setDirty(false);
     }, delay);
     return () => window.clearTimeout(id);
-  }, [local, dirty, delay, commit]);
+  }, [local, dirty, delay]);
   return [
     local,
     (v: T) => {

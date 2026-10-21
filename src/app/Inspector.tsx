@@ -32,8 +32,7 @@ function Section({ title, children, open = true }: { title: string; children: Re
 }
 
 function Slider({ label, value, min, max, step, unit, onCommit, disabled }: { label: string; value: number; min: number; max: number; step: number; unit: string; onCommit: (v: number) => void; disabled?: boolean }) {
-  const commit = useCallback((v: number) => onCommit(v), [onCommit]);
-  const [local, setLocal] = useDebouncedCommit(value, commit);
+  const [local, setLocal] = useDebouncedCommit(value, onCommit);
   return (
     <label className="slider">
       <span className="slider-label">

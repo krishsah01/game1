@@ -16,12 +16,13 @@ interface Props {
   title: string;
   description: string;
   hint: string;
+  busy?: boolean;
   onPrev: () => void;
   onNext: () => void;
   onExit: () => void;
 }
 
-export function Tour({ index, total, title, description, hint, onPrev, onNext, onExit }: Props) {
+export function Tour({ index, total, title, description, hint, busy = false, onPrev, onNext, onExit }: Props) {
   return (
     <div className="tour" role="dialog" aria-label="Guided tour">
       <div className="tour-head">
@@ -36,10 +37,10 @@ export function Tour({ index, total, title, description, hint, onPrev, onNext, o
       <p>{description}</p>
       <p className="hint">{hint}</p>
       <div className="btn-row">
-        <button disabled={index === 0} onClick={onPrev}>
+        <button disabled={index === 0 || busy} onClick={onPrev}>
           ← Previous
         </button>
-        <button className="primary" onClick={onNext}>
+        <button className="primary" disabled={busy} onClick={onNext}>
           {index + 1 < total ? 'Next →' : 'Finish'}
         </button>
       </div>

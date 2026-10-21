@@ -44,7 +44,7 @@ Other commands:
 | Command | Purpose |
 | --- | --- |
 | `npm run typecheck` | strict TypeScript check of app, server, tests and scripts |
-| `npm test` | 89 focused vitest tests (geometry, cover, depth-cover peek, visibility, recon, aiming, shots, movement, stance/vault/arm-aim, information boundary, objective, GraphQL contract, session controller, camera projection) |
+| `npm test` | 90 focused vitest tests (geometry, cover, depth-cover peek, visibility, recon, aiming, shots, movement, stance/vault/arm-aim, information boundary, objective, GraphQL contract, session controller, camera projection) |
 | `npm run build` | production build into `dist/` |
 | `npm run preview` | serves `dist/` on http://127.0.0.1:4173 **with** the API (`vite preview` proxies `/graphql` to the Yoga server it starts alongside) |
 | `npm run check` | typecheck + tests + build |
@@ -120,6 +120,8 @@ React and Three.js):
 - One observer source besides the player (the camera). Drones, sensors, teammates, climbing, networking and server authority are deliberately not built.
 - Decorative meshes (ceiling beams, pipe, wall stripe, light fixtures, slot outline) carry no collision. The near-side door jamb is rendered as a translucent section cut so the slot stays readable; its collider is solid.
 - Audio is visual-only (no sound files).
+- Each preset places one scripted target actor (five different actors across the seven presets) rather than two at once, to keep every demonstration unambiguous.
+- The inspector opens by default on windows at least 1500 px wide; narrower windows start with it collapsed so the scene stays dominant (toggle with the Inspector button).
 
 ## 3. Two-minute tour
 
@@ -212,10 +214,18 @@ Then `src/shared/scenarios.ts` (the map and presets), `server/resolvers.ts`
 
 ## 7. Acceptance results
 
-Automated evidence is `npm test` (89 tests, all passing at the time of
+Automated evidence is `npm test` (90 tests, all passing at the time of
 writing) and the headless walkthrough `npm run screenshots` (32 frames in
-`docs/screenshots/`, 0 console or page errors). Manual checks were done in
-headless Chromium with SwiftShader WebGL.
+`docs/screenshots/`, 0 console or page errors, plus an assertion that one
+slider gesture produces exactly one `updateConfig`). Manual checks were done
+in headless Chromium with SwiftShader WebGL. An adversarial review pass (six
+independent reviewers plus skeptic re-verification against the brief) found and led to fixes for: a muzzle anchor that could sit inside a wall when
+the body is pressed against it, hidden-actor data in player-mode shot
+records and feedback, ghosts lingering for a frame after leaving developer
+view, keys sticking when the canvas lost input ownership, a reticle pixel
+clamp, silent port fallback, tuning sliders whose debounced commit was
+cancelled by the HUD re-render, and a stuck `mutating` flag after switching
+scenario mid-mutation.
 
 ### Scene and movement
 
