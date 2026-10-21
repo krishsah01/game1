@@ -19,7 +19,8 @@ export function Hud({ p }: { p: Presentation }) {
         <div className="hud-row">
           <span className="tag attack">ATTACK</span>
           <span className="hud-k">STANCE</span>
-          <span className="hud-v">{pl.stance === 'CROUCHED' ? 'CROUCH' : 'STAND'}</span>
+          <span className="hud-v">{pl.stance === 'CROUCHED' ? 'CROUCH' : pl.stance === 'PRONE' ? 'PRONE' : 'STAND'}</span>
+          {pl.vaultProgress !== null && <span className="hud-v amber">VAULT</span>}
           {pl.cover.state !== 'none' && <span className="hud-v accent">{COVER_LABEL[pl.cover.state]}</span>}
           {pl.braced && <span className="hud-v amber">BRACED</span>}
           {pl.cover.aiming && pl.cover.state === 'none' && <span className="hud-v accent">ADS</span>}
@@ -32,7 +33,15 @@ export function Hud({ p }: { p: Presentation }) {
         </div>
         <div className="hud-row">
           <span className="hud-k">DEPTH</span>
-          <span className="hud-v">{pl.zoneLabel ? `${pl.zoneLabel} · W/S` : 'LANE (no zone)'}</span>
+          <span className="hud-v">
+            {pl.zoneLabel
+              ? pl.depthTargetZ !== null
+                ? `${pl.zoneLabel} · moving ${pl.depthLane}…`
+                : pl.depthLane === 'FAR'
+                  ? `${pl.zoneLabel} · FAR (S → lane)`
+                  : `${pl.zoneLabel} · LANE (W → far)`
+              : 'LANE (no depth zone here)'}
+          </span>
         </div>
       </div>
       <div className="hud top-center">
@@ -74,14 +83,16 @@ export function Hud({ p }: { p: Presentation }) {
       </div>
       <div className="hud bottom-left legend">
         <span>A/D move</span>
-        <span>W/S depth (in zone)</span>
+        <span>W far / S lane</span>
+        <span>Space vault</span>
         <span>C crouch</span>
-        <span>Space observe</span>
+        <span>Z prone</span>
+        <span>F observe</span>
         <span>RMB aim</span>
         <span>LMB fire</span>
         <span>Q/E aim depth</span>
         <span>B brace</span>
-        <span>1/2/3 speed</span>
+        <span>Tab speed</span>
         <span>V developer</span>
         <span>Esc help</span>
       </div>

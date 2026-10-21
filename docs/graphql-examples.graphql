@@ -34,6 +34,7 @@ query Scenario($id: ID!) {
         blocksShots
         visualRole
         isCover
+        isVaultable
       }
       entities { id kind team position { x y z } facingX stance script waypoints { x y z } holdSeconds }
       depthZones { id label bounds { center { x y z } size { x y z } } }

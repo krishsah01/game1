@@ -41,7 +41,7 @@ import {
   type Object3D,
 } from 'three';
 import { aabbFromBounds } from '../shared/geometry.ts';
-import { depthWord, LANE_HALF_WIDTH } from '../shared/tuning.ts';
+import { ANCHORS, depthWord, LANE_HALF_WIDTH } from '../shared/tuning.ts';
 import type { Bounds, ColliderSeed, SceneSeed } from '../shared/types.ts';
 import type { EntityView, Presentation, ViewMode } from '../simulation/world.ts';
 import { fitOrthographic, followCenterX } from './cameraRig.ts';
@@ -217,7 +217,7 @@ export class SceneView {
     this.buildDecor(seed);
     this.buildZones(seed);
     this.buildSmoke(seed.smokeBounds);
-    this.player.snapPose({ eyeY: 1.62, muzzleY: 1.38, height: 1.8, eyeForward: 0.12, muzzleForward: 0.62 });
+    this.player.snapPose(ANCHORS.standing);
     const playerSeed = seed.entities.find((e) => e.kind === 'PLAYER');
     this.followX = followCenterX(playerSeed?.position.x ?? 0, seed.roomMinX, seed.roomMaxX, this.halfWidth());
 
@@ -254,6 +254,11 @@ export class SceneView {
         break;
       case 'barrier':
         geometry = makeBarrierGeometry(b.size.x, b.size.y, b.size.z);
+        color = 0x8d8a83;
+        break;
+      case 'lowwall':
+        // Waist-high concrete wall spanning the whole depth axis (cover + vaultable).
+        geometry = new BoxGeometry(b.size.x, b.size.y, b.size.z);
         color = 0x8d8a83;
         break;
       case 'jamb':
@@ -299,7 +304,7 @@ export class SceneView {
     mesh.userData.colliderId = c.id;
     this.staticGroup.add(mesh);
     const materials = [material];
-    if (c.visualRole === 'crate' || c.visualRole === 'terminal' || translucent) {
+    if (c.visualRole === 'crate' || c.visualRole === 'terminal' || c.visualRole === 'lowwall' || translucent) {
       const edges = new LineSegments(new EdgesGeometry(geometry), new LineBasicMaterial({ color: translucent ? 0xb9c6cf : 0x262a22, transparent: true, opacity: translucent ? 0.8 : 0.6 }));
       edges.position.copy(mesh.position);
       this.staticGroup.add(edges);
@@ -376,7 +381,7 @@ export class SceneView {
       wire.position.set(b.center.x, b.center.y, b.center.z);
       wire.userData.dev = true;
       this.zoneGroup.add(wire);
-      this.labels.upsert(`zone-${z.id}`, 'zone', `⇅ ${z.label}`, { x: b.center.x, y: 0.0, z: b.center.z + b.size.z / 2 }, 0, 14, 'W / S depth');
+      this.labels.upsert(`zone-${z.id}`, 'zone', `⇅ ${z.label}`, { x: b.center.x, y: 0.0, z: b.center.z + b.size.z / 2 }, 0, 14, 'W far · S lane');
     }
     const cb = seed.captureBounds;
     const band = new Mesh(new BoxGeometry(cb.size.x, 0.05, cb.size.z), new MeshBasicMaterial({ color: AMBER, transparent: true, opacity: 0.3, depthWrite: false }));
@@ -476,7 +481,9 @@ export class SceneView {
     const pl = p.player;
     this.player.group.position.set(pl.position.x, pl.position.y, pl.position.z);
     this.player.setTarget(pl.cover.anchors);
-    this.player.update(dt, pl.facingX, pl.moving, pl.moveMode === 'SPRINT');
+    // Arms and rifle follow the mechanical aim pitch; the body tucks while vaulting.
+    this.player.setPose({ aimPitch: pl.cover.aimPitch, vaultProgress: pl.vaultProgress });
+    this.player.update(dt, pl.facingX, pl.moving, pl.moveMode === 'SPRINT' && pl.stance !== 'PRONE');
     this.player.setOutline(false);
     const keepLabels = new Set<string>();
     if (Math.abs(pl.position.z) > LANE_HALF_WIDTH) {
@@ -495,7 +502,7 @@ export class SceneView {
       entry.object.visible = true;
       entry.object.position.set(e.position.x, e.position.y, e.position.z);
       if (entry.soldier) {
-        entry.soldier.setTarget(e.stance === 'CROUCHED' ? { eyeY: 0.98, muzzleY: 0.92, height: 1.06, eyeForward: 0.14, muzzleForward: 0.58 } : { eyeY: 1.62, muzzleY: 1.38, height: 1.8, eyeForward: 0.12, muzzleForward: 0.62 });
+        entry.soldier.setTarget(e.stance === 'CROUCHED' ? ANCHORS.crouched : e.stance === 'PRONE' ? ANCHORS.prone : ANCHORS.standing);
         entry.soldier.update(dt, e.facingX, e.moving, false);
         entry.soldier.setGhost(dev && !e.observed);
         entry.soldier.setOutline(e.observed);
@@ -628,7 +635,7 @@ export class SceneView {
     let entry: ActorEntry;
     if (e.kind === 'ENEMY') {
       const soldier = new SoldierModel(ENEMY_TINT);
-      soldier.snapPose({ eyeY: 1.62, muzzleY: 1.38, height: 1.8, eyeForward: 0.12, muzzleForward: 0.62 });
+      soldier.snapPose(ANCHORS.standing);
       const marker = new Mesh(new ConeGeometry(0.09, 0.16, 3), new MeshBasicMaterial({ color: 0xc4532f }));
       marker.rotation.x = Math.PI;
       marker.position.y = 2.05;

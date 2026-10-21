@@ -31,6 +31,8 @@ describe('GraphQL contract', () => {
     expect(s.initialScene.colliders.length).toBeGreaterThan(10);
     expect(s.initialScene.entities.find((e: any) => e.id === 'enemy-c')).toMatchObject({ kind: 'ENEMY', facingX: -1, script: 'STATIC' });
     expect(s.initialScene.recon.id).toBe('cam-01');
+    expect(s.initialScene.colliders.find((c: any) => c.id === 'barrier-a')).toMatchObject({ isCover: true, isVaultable: true, visualRole: 'lowwall' });
+    expect(s.initialScene.colliders.find((c: any) => c.id === 'jamb-c-far')).toMatchObject({ isVaultable: false });
     expect(s.defaultConfig.cameraStatus).toBe('OFFLINE');
     expect(s.initialScene.entities.every((e: any) => e.facingX === 1 || e.facingX === -1)).toBe(true);
   });

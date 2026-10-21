@@ -109,9 +109,25 @@ export function Inspector({ controller, state, p, mode, devOptions, onDevOptions
           <button className={pl?.stance === 'CROUCHED' ? 'on' : ''} onClick={() => cmd({ type: 'setStance', stance: 'CROUCHED' })}>
             Crouch
           </button>
+          <button className={pl?.stance === 'PRONE' ? 'on' : ''} onClick={() => cmd({ type: 'setStance', stance: 'PRONE' })}>
+            Prone
+          </button>
           <button className={pl?.braced ? 'on' : ''} onClick={() => cmd({ type: 'toggleBrace' })}>
             Brace
           </button>
+          <button className={pl?.vaultProgress !== null && pl?.vaultProgress !== undefined ? 'on' : ''} onClick={() => cmd({ type: 'vault' })} title="Space">
+            Vault
+          </button>
+        </div>
+        <div className="btn-row">
+          <span className="muted small">Depth (on/off):</span>
+          <button className={pl?.depthLane === 'FAR' ? 'on' : ''} disabled={!pl?.zoneLabel} onClick={() => cmd({ type: 'setDepthLane', lane: 'FAR' })} title="W">
+            Go FAR
+          </button>
+          <button className={pl?.depthLane === 'LANE' ? 'on' : ''} onClick={() => cmd({ type: 'setDepthLane', lane: 'LANE' })} title="S">
+            Back to lane
+          </button>
+          <span className="muted small">{pl?.zoneLabel ? `${pl.zoneLabel} · far edge z ${pl.zoneFarZ?.toFixed(1)}` : 'no depth zone here'}</span>
         </div>
         <div className="btn-row">
           <span className="muted small">Cover state:</span>
@@ -145,7 +161,9 @@ export function Inspector({ controller, state, p, mode, devOptions, onDevOptions
               </tr>
               <tr>
                 <td>Muzzle y</td>
-                <td>{pl.cover.muzzle.y.toFixed(2)} m</td>
+                <td>
+                  {pl.cover.muzzle.y.toFixed(2)} m · pitch {((pl.cover.aimPitch * 180) / Math.PI).toFixed(0)}°{pl.cover.muzzleClamped ? ' · pressed to cover' : ''}
+                </td>
               </tr>
               {dev && (
                 <tr>
@@ -163,7 +181,7 @@ export function Inspector({ controller, state, p, mode, devOptions, onDevOptions
           </table>
         )}
         <div className="btn-row">
-          <span className="muted small">Speed:</span>
+          <span className="muted small">Speed (Tab):</span>
           {(['WALK', 'COMBAT', 'SPRINT'] as MoveMode[]).map((m) => (
             <button key={m} className={pl?.moveMode === m ? 'on' : ''} onClick={() => cmd({ type: 'setMoveMode', mode: m })}>
               {m}

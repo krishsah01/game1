@@ -58,6 +58,18 @@ async function inspectorButton(page: Page, label: string) {
   await page.locator('.inspector button', { hasText: new RegExp(`^${label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`) }).first().click();
 }
 
+/** Puts the pointer on a world point (through the app's world→screen debug hook). */
+async function aimWorld(page: Page, x: number, y: number, z: number) {
+  const pt = await page.evaluate(
+    ([wx, wy, wz]) => (window as unknown as { __milsimLab: { worldToScreen: (x: number, y: number, z: number) => { x: number; y: number } } }).__milsimLab.worldToScreen(wx!, wy!, wz!),
+    [x, y, z],
+  );
+  const box = await page.locator('canvas.scene-canvas').boundingBox();
+  if (!box) throw new Error('no canvas');
+  await page.mouse.move(box.x + pt.x, box.y + pt.y);
+  await page.waitForTimeout(150);
+}
+
 async function main() {
   mkdirSync(OUT, { recursive: true });
   const browser = await chromium.launch({
@@ -177,6 +189,37 @@ async function main() {
   await shot(page, '07b-control-contested', 'Defender entered behind the crate stack: public CONTESTED state, no defender marker.');
   await setMode(page, true);
   await shot(page, '07c-control-contested-dev', 'Developer truth: the defender stands inside the zone, unobserved.');
+  await setMode(page, false);
+
+  // v0.2 (2DS-2): prone, vault, arms follow the aim point, on/off depth.
+  await selectScenario(page, 1);
+  await setMode(page, true);
+  await hoverCanvas(page, 0.6, 0.62);
+  await inspectorButton(page, 'Prone');
+  await page.waitForTimeout(700);
+  await shot(page, '10a-prone-behind-wall', 'v0.2 prone (Z): lowest profile behind the full-depth low wall; eye below the top, rifle pressed to the face.');
+  await inspectorButton(page, 'Stand');
+  await page.waitForTimeout(500);
+  await focusCanvas(page);
+  await hoverCanvas(page, 0.6, 0.62);
+  await page.keyboard.press(' ');
+  await page.waitForTimeout(330);
+  await shot(page, '10b-vault-mid', 'v0.2 vault (Space): mid-vault the head clears the wall and the target beyond is observed; firing is disabled.');
+  await page.waitForTimeout(900);
+  await shot(page, '10c-vault-landed', 'Landed beyond the wall, which spans the whole depth axis (over the top is the only way past).');
+  await aimWorld(page, -6.2, 3.2, 0);
+  await page.waitForTimeout(300);
+  await shot(page, '10d-arms-aim-up', 'Arms and rifle swing toward a high pointer; the amber firing line leaves the raised barrel tip.');
+  await selectScenario(page, 5);
+  await setMode(page, true);
+  await focusCanvas(page);
+  await hoverCanvas(page, 0.72, 0.6);
+  await page.keyboard.press('w');
+  await page.waitForTimeout(1000);
+  await shot(page, '10e-depth-far', 'v0.2 on/off depth: W glides to the FAR edge of the approach zone; the MID target now hides behind the far jamb.');
+  await page.keyboard.press('s');
+  await page.waitForTimeout(1000);
+  await shot(page, '10f-depth-lane', 'S glides back to the lane; the target is visible through the slot again.');
   await setMode(page, false);
 
   // API error demo + help

@@ -4,9 +4,7 @@ import type { MoveMode, Stance } from '../shared/types.ts';
 export interface HeldInput {
   /** -1 left, 0 none, +1 right */
   moveX: -1 | 0 | 1;
-  /** -1 = toward the camera (NEAR, +Z), +1 = into the screen (FAR, -Z). 0 none. */
-  moveZ: -1 | 0 | 1;
-  /** Space held: observe above cover (crouched at cover only). */
+  /** F held: observe above cover (crouched at cover only). */
   observe: boolean;
   /** Right mouse held: aim / aim-over cover. */
   aim: boolean;
@@ -14,17 +12,29 @@ export interface HeldInput {
   pointerWorld: { x: number; y: number } | null;
 }
 
-export const emptyHeld = (): HeldInput => ({ moveX: 0, moveZ: 0, observe: false, aim: false, pointerWorld: null });
+export const emptyHeld = (): HeldInput => ({ moveX: 0, observe: false, aim: false, pointerWorld: null });
 
 export type CoverIntent = 'hidden' | 'observe' | 'aimOver' | null;
 
+/**
+ * Depth is on/off: LANE is the default z = 0 travel lane, FAR is the far edge
+ * of the depth zone the body stands in. W requests FAR, S requests LANE.
+ */
+export type DepthLane = 'LANE' | 'FAR';
+
 export type Command =
   | { type: 'toggleCrouch' }
+  | { type: 'toggleProne' }
   | { type: 'setStance'; stance: Stance }
   | { type: 'setMoveMode'; mode: MoveMode }
+  | { type: 'cycleMoveMode' }
   | { type: 'fire' }
   | { type: 'testFiringLine' }
   | { type: 'reload' }
+  /** Depth move (W = FAR, S = LANE). Only honoured inside a depth zone. */
+  | { type: 'setDepthLane'; lane: DepthLane }
+  /** Space: vault the `isVaultable` obstacle directly ahead. */
+  | { type: 'vault' }
   | { type: 'stepDepth'; direction: -1 | 1 }
   | { type: 'setSelectedDepth'; depth: number }
   | { type: 'toggleBrace' }

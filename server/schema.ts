@@ -26,7 +26,7 @@ export const typeDefs = /* GraphQL */ `
   enum Team { FRIENDLY OPPOSING NEUTRAL }
   enum ScriptKind { STATIC PATROL LOST_CONTACT_ROUTE OBJECTIVE_CONTEST }
   enum CameraStatus { ONLINE OFFLINE JAMMED DESTROYED }
-  enum Stance { STANDING CROUCHED }
+  enum Stance { STANDING CROUCHED PRONE }
   enum MoveMode { WALK COMBAT SPRINT }
 
   type Vec3 { x: Float!, y: Float!, z: Float! }
@@ -40,6 +40,8 @@ export const typeDefs = /* GraphQL */ `
     blocksShots: Boolean!
     visualRole: String!
     isCover: Boolean!
+    "Explicit flag: a standing or crouched actor may vault over it (Space)."
+    isVaultable: Boolean!
   }
 
   type EntitySeed {

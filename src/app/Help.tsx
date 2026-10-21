@@ -12,18 +12,26 @@ export function Help({ onClose }: { onClose: () => void }) {
             </tr>
             <tr>
               <td>W / S</td>
-              <td>Step into the screen (FAR) / toward the camera (NEAR) inside a marked depth zone</td>
+              <td>Depth is on/off: W glides to the FAR edge of the depth zone you stand in, S glides back to the lane (z = 0). Nothing moves toward the camera.</td>
             </tr>
             <tr>
-              <td>1 / 2 / 3</td>
-              <td>Walk (quiet) / combat move / sprint (loud, unstable)</td>
+              <td>Space</td>
+              <td>Vault the low wall ahead (standing or crouched). Vaultable walls span the whole depth, so over the top is the only way past.</td>
+            </tr>
+            <tr>
+              <td>Tab</td>
+              <td>Cycle walk (quiet) → combat move → sprint (loud, unstable)</td>
             </tr>
             <tr>
               <td>C</td>
-              <td>Toggle crouch (crouched at waist-high cover = hidden)</td>
+              <td>Toggle crouch (crouched at waist-high cover = hidden); from prone, rises to a crouch</td>
             </tr>
             <tr>
-              <td>Space (hold)</td>
+              <td>Z</td>
+              <td>Toggle prone: slow crawl, lowest profile, steadiest aim, cannot vault</td>
+            </tr>
+            <tr>
+              <td>F (hold)</td>
               <td>Observe above cover: eyes clear, muzzle stays blocked</td>
             </tr>
             <tr>
@@ -32,7 +40,11 @@ export function Help({ onClose }: { onClose: () => void }) {
             </tr>
             <tr>
               <td>Left mouse</td>
-              <td>Fire a demonstrator shot (disabled while hidden)</td>
+              <td>Fire a demonstrator shot (disabled while hidden or vaulting)</td>
+            </tr>
+            <tr>
+              <td>Mouse height</td>
+              <td>The arms and rifle swing toward the pointer; the shot leaves the raised or lowered barrel tip</td>
             </tr>
             <tr>
               <td>Q / E</td>

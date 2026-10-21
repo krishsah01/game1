@@ -9,8 +9,12 @@
  *
  *   x -19 ........ -6 | -6 ........ 1 | 1 ........ 10 | 10 ...... 14.8 ... 21
  *   STATION A           STATION B near   STATION B far   STATION C     CONTROL A
- *   barrier + target    partition wall   camera, patrol  slot aperture capture zone
- *                       (back-lane door)  bag, smoke      + target      + defender
+ *   low wall + target   low wall at -3.2  camera, patrol  slot aperture capture zone
+ *   (vaultable)         partition wall    bag, smoke      + target      + defender
+ *                       (back-lane door)
+ *
+ * Vaultable obstacles (`isVaultable`) span the entire depth axis, so the only
+ * way past them is over the top (Space).
  */
 import type {
   Bounds,
@@ -33,11 +37,17 @@ export const ROOM_FRONT_Z = 1.6;
 export const ROOM_HEIGHT = 5;
 
 export const BARRIER_TOP_Y = 1.1;
+/** Second vaultable low wall between stations A and B. */
+export const LOW_WALL_AB_X = -3.15;
+export const LOW_WALL_AB_TOP_Y = 1.0;
+/** Full room depth, used by obstacles that span the depth axis. */
+export const ROOM_DEPTH_CENTER_Z = (ROOM_BACK_Z + ROOM_FRONT_Z) / 2;
+export const ROOM_DEPTH = ROOM_FRONT_Z - ROOM_BACK_Z;
 /** Slot aperture in the station-C partition, z range. */
 export const SLOT_Z_MIN = -0.35;
 export const SLOT_Z_MAX = 0.35;
 
-const solid = (id: string, b: Bounds, visualRole: string, isCover = false): ColliderSeed => ({
+const solid = (id: string, b: Bounds, visualRole: string, isCover = false, isVaultable = false): ColliderSeed => ({
   id,
   bounds: b,
   blocksMovement: true,
@@ -45,6 +55,7 @@ const solid = (id: string, b: Bounds, visualRole: string, isCover = false): Coll
   blocksShots: true,
   visualRole,
   isCover,
+  isVaultable,
 });
 
 function buildColliders(): ColliderSeed[] {
@@ -67,13 +78,17 @@ function buildColliders(): ColliderSeed[] {
   out.push(solid('wall-right', bounds(ROOM_MAX_X + 0.15, ROOM_HEIGHT / 2, -0.7, 0.3, ROOM_HEIGHT, 4.9), 'wall'));
 
   // ---- Station A: exposure -------------------------------------------------
-  // Waist-high concrete barrier, top at y = 1.10.
-  out.push(solid('barrier-a', bounds(-10, BARRIER_TOP_Y / 2, 0, 1.6, BARRIER_TOP_Y, 0.6), 'barrier', true));
+  // Waist-high concrete wall, top at y = 1.10, spanning the whole depth axis:
+  // cover to hide behind, and the only way past it is to vault (Space).
+  out.push(solid('barrier-a', bounds(-10, BARRIER_TOP_Y / 2, ROOM_DEPTH_CENTER_Z, 1.6, BARRIER_TOP_Y, ROOM_DEPTH), 'lowwall', true, true));
   // Fixed crates against the back wall (persistent structure, not loot).
   out.push(solid('crate-a1', bounds(-15, 0.5, -2.4, 1.2, 1.0, 1.2), 'crate'));
   out.push(solid('crate-a2', bounds(-15, 1.4, -2.4, 1.0, 0.8, 1.0), 'crate'));
   out.push(solid('locker-a', bounds(-17.6, 1.1, -2.6, 0.8, 2.2, 0.6), 'locker'));
   out.push(solid('crate-a3', bounds(-7.8, 0.45, -2.3, 1.4, 0.9, 1.2), 'crate'));
+
+  // ---- Between A and B: a second vaultable low wall (top 1.00 m), full depth.
+  out.push(solid('barrier-ab', bounds(LOW_WALL_AB_X, LOW_WALL_AB_TOP_Y / 2, ROOM_DEPTH_CENTER_Z, 0.5, LOW_WALL_AB_TOP_Y, ROOM_DEPTH), 'lowwall', true, true));
 
   // ---- Station B: intelligence --------------------------------------------
   // Opaque partition at x = 1 with a full-height gap at the back (z -3.0..-2.15)
@@ -101,6 +116,7 @@ function buildColliders(): ColliderSeed[] {
     blocksShots: true,
     visualRole: 'terminal',
     isCover: false,
+    isVaultable: false,
   });
   // Tall fixed crate stack at the back of the capture zone: a defender can
   // stand behind it, inside the zone, unseen from the lane.

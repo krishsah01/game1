@@ -34,7 +34,7 @@ export const SCENARIO = /* GraphQL */ `
         mapId
         roomMinX
         roomMaxX
-        colliders { id bounds ${BOUNDS} blocksMovement blocksSight blocksShots visualRole isCover }
+        colliders { id bounds ${BOUNDS} blocksMovement blocksSight blocksShots visualRole isCover isVaultable }
         entities { id kind team label position ${VEC3} facingX stance moveMode script waypoints ${VEC3} holdSeconds }
         depthZones { id label bounds ${BOUNDS} }
         smokeBounds ${BOUNDS}

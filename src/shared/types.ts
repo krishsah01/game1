@@ -38,7 +38,7 @@ export type EntityKind = 'PLAYER' | 'ENEMY' | 'DROPPED_GEAR' | 'CAMERA';
 export type Team = 'FRIENDLY' | 'OPPOSING' | 'NEUTRAL';
 export type ScriptKind = 'STATIC' | 'PATROL' | 'LOST_CONTACT_ROUTE' | 'OBJECTIVE_CONTEST';
 export type CameraStatus = 'ONLINE' | 'OFFLINE' | 'JAMMED' | 'DESTROYED';
-export type Stance = 'STANDING' | 'CROUCHED';
+export type Stance = 'STANDING' | 'CROUCHED' | 'PRONE';
 export type MoveMode = 'WALK' | 'COMBAT' | 'SPRINT';
 
 /**
@@ -55,6 +55,12 @@ export interface ColliderSeed {
   visualRole: string;
   /** True when a crouched actor may use this as waist-high or doorway cover. */
   isCover: boolean;
+  /**
+   * True when a standing or crouched actor may vault over it (Space). Explicit
+   * flag: appearance or height alone never decides the rule. Vaultable
+   * obstacles in the test map span the entire depth axis.
+   */
+  isVaultable: boolean;
 }
 
 export interface EntitySeed {

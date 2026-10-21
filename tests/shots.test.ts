@@ -77,23 +77,23 @@ describe('3D shot resolution at the aperture', () => {
     expect(r.hit!.t).toBeLessThan(1);
   });
 
-  it('depth movement changes the real sightline: stepping NEAR hides a MID target behind the near jamb', () => {
+  it('depth movement changes the real sightline: going FAR hides a MID target behind the far jamb', () => {
     const w = makeWorld('depth-shot');
     ticks(w, 5);
     expect(w.knowledge.observations.get('enemy-c')?.observed).toBe(true);
-    hold(w, { moveZ: -1 }); // toward camera (+Z)
+    w.command({ type: 'setDepthLane', lane: 'FAR' }); // W: glide to the zone's far edge
     ticks(w, 60);
-    expect(w.player.position.z).toBeGreaterThan(0.6);
+    expect(w.player.position.z).toBeLessThan(-1.1);
     expect(w.knowledge.observations.get('enemy-c')?.observed).toBe(false);
-    expect(w.sampleResultsFor('enemy-c').every((s) => s.blockedBy === 'jamb-c-near')).toBe(true);
+    expect(w.sampleResultsFor('enemy-c').every((s) => s.blockedBy === 'jamb-c-far')).toBe(true);
   });
 
-  it('a NEAR target becomes visible only after stepping FAR so the line crosses the slot', () => {
+  it('a NEAR target becomes visible only after going FAR so the line crosses the slot', () => {
     const w = makeWorld('depth-shot');
     w.command({ type: 'setActorDepth', id: 'enemy-c', z: 0.7 });
     ticks(w, 5);
     expect(w.knowledge.observations.get('enemy-c')?.observed).toBe(false);
-    hold(w, { moveZ: 1 }); // into the screen (-Z)
+    w.command({ type: 'setDepthLane', lane: 'FAR' });
     ticks(w, 50);
     hold(w, {});
     ticks(w, 5);

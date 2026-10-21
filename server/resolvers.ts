@@ -11,7 +11,7 @@ import type { CameraStatus, DemoConfig, DemoConfigPatch } from '../src/shared/ty
 import type { SessionStore } from './store.ts';
 
 export const API_NAME = 'milsim-concept-lab-api';
-export const API_VERSION = '0.1.0';
+export const API_VERSION = '0.2.0';
 
 const CAMERA_STATUSES: CameraStatus[] = ['ONLINE', 'OFFLINE', 'JAMMED', 'DESTROYED'];
 

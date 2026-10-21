@@ -2,8 +2,14 @@
  * Keyboard/mouse input for the canvas. Inputs are honoured only while the
  * canvas owns input (it is focused, or the pointer is over it and no form
  * control is focused). Focus loss clears every held input.
+ *
+ * Keys (prototype v0.2):
+ *   A / D, ← →   move          W / ↑  go FAR (far edge of the depth zone)
+ *   S / ↓        back to lane  Space  vault the obstacle ahead
+ *   C crouch · Z prone · F (hold) observe · RMB (hold) aim · LMB fire
+ *   Tab cycles walk → combat → sprint · Q / E aim depth · B brace
+ *   V developer view · P pause · . step · R reload · Esc help
  */
-import type { MoveMode } from '../shared/types.ts';
 import { emptyHeld, type HeldInput } from '../simulation/input.ts';
 import type { World } from '../simulation/world.ts';
 
@@ -15,6 +21,7 @@ export interface InputCallbacks {
 }
 
 const FORM_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON']);
+const HANDLED = new Set(['a', 'd', 'w', 's', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Tab', 'c', 'z', 'f', 'q', 'e', 'b', 'v', 'r', 'Escape', 'p', '.']);
 
 export class InputController {
   readonly held: HeldInput = emptyHeld();
@@ -95,25 +102,34 @@ export class InputController {
     if (!this.canvasOwnsInput()) return;
     const key = ev.key.length === 1 ? ev.key.toLowerCase() : ev.key;
     const world = this.getWorld();
-    const handled = new Set(['a', 'd', 'w', 's', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', '1', '2', '3', 'c', 'q', 'e', 'b', 'v', 'r', 'Escape', 'p', '.']);
-    if (!handled.has(key)) return;
+    if (!HANDLED.has(key)) return;
     ev.preventDefault();
     if (ev.repeat) return;
     if (down) this.keys.add(key);
     else this.keys.delete(key);
     this.recomputeAxes();
-    this.held.observe = this.keys.has(' ');
+    this.held.observe = this.keys.has('f');
     if (!down || !world) return;
     switch (key) {
-      case '1':
-      case '2':
-      case '3': {
-        const mode: MoveMode = key === '1' ? 'WALK' : key === '2' ? 'COMBAT' : 'SPRINT';
-        world.command({ type: 'setMoveMode', mode });
+      case 'w':
+      case 'ArrowUp':
+        world.command({ type: 'setDepthLane', lane: 'FAR' });
         break;
-      }
+      case 's':
+      case 'ArrowDown':
+        world.command({ type: 'setDepthLane', lane: 'LANE' });
+        break;
+      case ' ':
+        world.command({ type: 'vault' });
+        break;
+      case 'Tab':
+        world.command({ type: 'cycleMoveMode' });
+        break;
       case 'c':
         world.command({ type: 'toggleCrouch' });
+        break;
+      case 'z':
+        world.command({ type: 'toggleProne' });
         break;
       case 'q':
         world.command({ type: 'stepDepth', direction: -1 });
@@ -145,17 +161,13 @@ export class InputController {
   private recomputeAxes(): void {
     const left = this.keys.has('a') || this.keys.has('ArrowLeft');
     const right = this.keys.has('d') || this.keys.has('ArrowRight');
-    const into = this.keys.has('w') || this.keys.has('ArrowUp');
-    const toward = this.keys.has('s') || this.keys.has('ArrowDown');
     this.held.moveX = left === right ? 0 : left ? -1 : 1;
-    this.held.moveZ = into === toward ? 0 : into ? 1 : -1;
   }
 
   /** Clears all held inputs (focus loss / pause). */
   clear(notify: boolean): void {
     this.keys.clear();
     this.held.moveX = 0;
-    this.held.moveZ = 0;
     this.held.observe = false;
     this.held.aim = false;
     if (notify) this.callbacks.onFocusLost();

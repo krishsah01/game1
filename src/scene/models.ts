@@ -2,8 +2,9 @@
  * Procedural low-poly models. Soldiers are assembled from boxes so helmet,
  * head, torso, carrier, limbs, boots and rifle read clearly in silhouette.
  * Poses are driven by the simulation's mechanical anchors: the head centre
- * sits at eyeY and the rifle tip at muzzleY, so what you see is what the
- * sight and firing tests use.
+ * sits at eyeY and the rifle tip at the muzzle anchor (pivot + rest offset
+ * rotated by the aim pitch), so what you see is what the sight and firing
+ * tests use. Standing, kneeling and prone are blends of one skeleton.
  */
 import {
   BackSide,
@@ -39,6 +40,18 @@ function std(color: number, extra: Partial<MeshStandardMaterial> = {}): MeshStan
   return m;
 }
 
+export interface SoldierPose {
+  /** Mechanical aim pitch in radians (positive = up). The arms and rifle swing around the pivot by this angle. */
+  aimPitch: number;
+  /** 0..1 while a vault is in progress (legs tuck), null otherwise. */
+  vaultProgress: number | null;
+}
+
+interface Pt {
+  x: number;
+  y: number;
+}
+
 export class SoldierModel {
   readonly group = new Group();
   private readonly body = new Group();
@@ -49,9 +62,12 @@ export class SoldierModel {
   private readonly outlineParts: Record<string, Mesh> = {};
   private walkPhase = 0;
   private facing = 1;
-  private pose: { anchors: StanceAnchors; crouch: number } | null = null;
+  private pose: { anchors: StanceAnchors; crouch: number; prone: number } | null = null;
   private targetAnchors: StanceAnchors | null = null;
-  private current: { eyeY: number; muzzleY: number; height: number } | null = null;
+  private current: StanceAnchors | null = null;
+  private aimPitchTarget = 0;
+  private aimPitch = 0;
+  private vaultProgress: number | null = null;
 
   constructor(tint: SoldierTint) {
     const mk = (name: string, geo: BoxGeometry | SphereGeometry | CylinderGeometry, color: number) => {
@@ -90,7 +106,7 @@ export class SoldierModel {
 
   /** Immediate pose (used on reset) */
   snapPose(anchors: StanceAnchors): void {
-    this.current = { eyeY: anchors.eyeY, muzzleY: anchors.muzzleY, height: anchors.height };
+    this.current = { ...anchors };
     this.targetAnchors = anchors;
   }
 
@@ -99,85 +115,135 @@ export class SoldierModel {
     if (!this.current) this.snapPose(anchors);
   }
 
+  /** Aim pitch and vault progress come from the simulation; the visual pitch is lightly smoothed. */
+  setPose(pose: SoldierPose): void {
+    this.aimPitchTarget = pose.aimPitch;
+    this.vaultProgress = pose.vaultProgress;
+  }
+
   /** Interpolates the visual pose toward the mechanical anchors and lays out the parts. */
   update(dt: number, facingX: -1 | 1, moving: boolean, sprinting: boolean): void {
     if (!this.targetAnchors || !this.current) return;
     const t = this.targetAnchors;
+    const c = this.current;
     const k = 1 - Math.exp(-dt / 0.09);
-    this.current.eyeY += (t.eyeY - this.current.eyeY) * k;
-    this.current.muzzleY += (t.muzzleY - this.current.muzzleY) * k;
-    this.current.height += (t.height - this.current.height) * k;
+    c.eyeY += (t.eyeY - c.eyeY) * k;
+    c.muzzleY += (t.muzzleY - c.muzzleY) * k;
+    c.height += (t.height - c.height) * k;
+    c.eyeForward += (t.eyeForward - c.eyeForward) * k;
+    c.muzzleForward += (t.muzzleForward - c.muzzleForward) * k;
+    c.pivotForward += (t.pivotForward - c.pivotForward) * k;
+    c.pivotY += (t.pivotY - c.pivotY) * k;
+    this.aimPitch += (this.aimPitchTarget - this.aimPitch) * (1 - Math.exp(-dt / 0.06));
     this.facing = facingX;
-    this.walkPhase += dt * (moving ? (sprinting ? 13 : 8.5) : 0);
-    this.layout(this.current.eyeY, this.current.muzzleY, this.current.height, moving, t);
-    this.pose = { anchors: t, crouch: 1 - Math.min(1, Math.max(0, (this.current.height - 1.06) / (1.8 - 1.06))) };
+    const prone = clamp01((1.06 - c.height) / (1.06 - 0.5));
+    this.walkPhase += dt * (moving ? (sprinting ? 13 : prone > 0.5 ? 5 : 8.5) : 0);
+    this.layout(c, moving, prone);
+    this.pose = { anchors: t, crouch: 1 - clamp01((c.height - 1.06) / (1.8 - 1.06)), prone };
   }
 
-  private layout(eyeY: number, muzzleY: number, height: number, moving: boolean, anchors: StanceAnchors): void {
+  private layout(a: StanceAnchors, moving: boolean, prone: number): void {
     const f = this.facing;
-    const crouch = 1 - Math.min(1, Math.max(0, (height - 1.06) / (1.8 - 1.06)));
+    const crouch = 1 - clamp01((a.height - 1.06) / (1.8 - 1.06));
     const p = this.parts;
     const swing = moving ? Math.sin(this.walkPhase) * 0.45 : 0;
+    const tuck = this.vaultProgress === null ? 0 : Math.sin(Math.PI * this.vaultProgress);
 
     const place = (m: Mesh, x: number, y: number, z: number, rz = 0) => {
       m.position.set(x, y, z);
       m.rotation.set(0, 0, rz);
+      m.scale.y = 1;
     };
     /** Lays a box (length axis = local Y, base length `baseLen`) along segment a→b. */
-    const limb = (m: Mesh, ax: number, ay: number, bx: number, by: number, z: number, baseLen: number) => {
-      const len = Math.max(0.1, Math.hypot(bx - ax, by - ay));
-      m.position.set((ax + bx) / 2, (ay + by) / 2, z);
-      m.rotation.set(0, 0, Math.atan2(bx - ax, -(by - ay)));
+    const limb = (m: Mesh, from: Pt, to: Pt, z: number, baseLen: number) => {
+      const len = Math.max(0.1, Math.hypot(to.x - from.x, to.y - from.y));
+      m.position.set((from.x + to.x) / 2, (from.y + to.y) / 2, z);
+      m.rotation.set(0, 0, Math.atan2(to.x - from.x, -(to.y - from.y)));
       m.scale.y = len / baseLen;
     };
-    const mix = (a: number, b: number, t: number) => a + (b - a) * t;
-    // Legs: blend between standing columns and a kneeling pose (front foot planted,
-    // rear knee on the ground with the shin flat behind).
-    const t = crouch;
-    const s = swing * (1 - t);
-    const hipY = mix(0.92, 0.5, t);
-    const kneeF = { x: mix(0.04 + s * 0.16, 0.4, t) * f, y: mix(0.5, 0.5, t) };
-    const ankleF = { x: mix(0.04 + s * 0.2, 0.42, t) * f, y: 0.1 };
-    const kneeR = { x: mix(-0.02 - s * 0.16, -0.04, t) * f, y: mix(0.5, 0.1, t) };
-    const ankleR = { x: mix(-0.02 - s * 0.2, -0.46, t) * f, y: 0.1 };
-    limb(p.thighR!, 0, hipY, kneeF.x, kneeF.y, 0.1, 0.44);
-    limb(p.shinR!, kneeF.x, kneeF.y, ankleF.x, ankleF.y, 0.1, 0.42);
-    limb(p.thighL!, 0, hipY, kneeR.x, kneeR.y, -0.1, 0.44);
-    limb(p.shinL!, kneeR.x, kneeR.y, ankleR.x, ankleR.y, -0.1, 0.42);
-    place(p.bootR!, ankleF.x + f * 0.03, 0.06, 0.1);
-    place(p.bootL!, ankleR.x - f * 0.02 * t, 0.06, -0.1);
+    const mix = (u: number, v: number, k: number) => u + (v - u) * k;
+    const mixPt = (u: Pt, v: Pt, k: number): Pt => ({ x: mix(u.x, v.x, k), y: mix(u.y, v.y, k) });
 
-    // Torso and plate carrier between hip and shoulders; shoulders under the head.
-    const headY = eyeY + 0.03;
-    const shoulderY = headY - 0.3;
-    const torsoY = (hipY + shoulderY) / 2 + 0.02;
-    const torsoH = Math.max(0.32, shoulderY - hipY + 0.14);
-    p.torso!.scale.y = torsoH / 0.52;
-    place(p.torso!, f * 0.01, torsoY, 0);
-    p.carrier!.scale.y = Math.min(1, torsoH / 0.52);
-    place(p.carrier!, f * 0.04, torsoY + 0.02, 0);
+    // ---- upright skeleton: blend between standing columns and a kneeling pose.
+    const tc = crouch;
+    const sw = swing * (1 - tc);
+    const headY = a.eyeY + 0.03;
+    const up = {
+      hip: { x: 0, y: mix(0.92, 0.5, tc) },
+      shoulder: { x: f * 0.01, y: headY - 0.3 },
+      head: { x: f * (a.eyeForward - 0.08), y: headY },
+      kneeF: { x: mix(0.04 + sw * 0.16, 0.4, tc) * f, y: 0.5 + tuck * 0.3 },
+      ankleF: { x: mix(0.04 + sw * 0.2, 0.42, tc) * f, y: 0.1 + tuck * 0.35 },
+      kneeR: { x: mix(-0.02 - sw * 0.16, -0.04, tc) * f, y: mix(0.5, 0.1, tc) + tuck * 0.3 },
+      ankleR: { x: mix(-0.02 - sw * 0.2, -0.46, tc) * f, y: 0.1 + tuck * 0.35 },
+    };
+    // ---- prone skeleton: head and shoulders forward (inside the collider), legs trailing behind.
+    const crawl = moving ? Math.sin(this.walkPhase) * 0.08 : 0;
+    const pr = {
+      hip: { x: -f * 0.46, y: 0.22 },
+      shoulder: { x: f * 0.0, y: 0.33 },
+      head: { x: f * (a.eyeForward - 0.03), y: a.eyeY + 0.03 },
+      kneeF: { x: -f * (0.86 + crawl), y: 0.17 },
+      ankleF: { x: -f * (1.26 + crawl), y: 0.13 },
+      kneeR: { x: -f * (0.9 - crawl), y: 0.18 },
+      ankleR: { x: -f * (1.3 - crawl), y: 0.13 },
+    };
+    const hip = mixPt(up.hip, pr.hip, prone);
+    const shoulder = mixPt(up.shoulder, pr.shoulder, prone);
+    const head = mixPt(up.head, pr.head, prone);
+    const kneeF = mixPt(up.kneeF, pr.kneeF, prone);
+    const ankleF = mixPt(up.ankleF, pr.ankleF, prone);
+    const kneeR = mixPt(up.kneeR, pr.kneeR, prone);
+    const ankleR = mixPt(up.ankleR, pr.ankleR, prone);
+
+    limb(p.thighR!, hip, kneeF, 0.1, 0.44);
+    limb(p.shinR!, kneeF, ankleF, 0.1, 0.42);
+    limb(p.thighL!, hip, kneeR, -0.1, 0.44);
+    limb(p.shinL!, kneeR, ankleR, -0.1, 0.42);
+    const bootRot = prone * f * 1.1;
+    place(p.bootR!, ankleF.x + f * 0.03 * (1 - prone), 0.06 + prone * 0.06, 0.1, bootRot);
+    place(p.bootL!, ankleR.x - f * 0.02 * tc * (1 - prone), 0.06 + prone * 0.06, -0.1, bootRot);
+
+    // Torso and plate carrier follow the hip→shoulder segment (vertical upright, horizontal prone).
+    limb(p.torso!, { x: hip.x, y: hip.y - 0.05 }, { x: shoulder.x, y: shoulder.y + 0.09 }, 0, 0.52);
+    limb(p.carrier!, mixPt(hip, shoulder, 0.3), mixPt(hip, shoulder, 0.97), 0.02, 0.4);
 
     // Head + helmet.
-    place(p.head!, f * 0.04, headY, 0);
-    place(p.helmet!, f * 0.04, headY + 0.08, 0);
+    place(p.head!, head.x, head.y, 0);
+    place(p.helmet!, head.x, head.y + 0.08, 0);
 
-    // Rifle: tip at (muzzleForward, muzzleY); the stock ends just behind the torso.
-    const tipX = f * anchors.muzzleForward;
+    // Rifle: swings around the pivot by the aim pitch; the tip is the mechanical muzzle anchor.
+    const pivot: Pt = { x: f * a.pivotForward, y: a.pivotY };
+    const ox = a.muzzleForward - a.pivotForward;
+    const oy = a.muzzleY - a.pivotY;
+    const restLen = Math.hypot(ox, oy);
+    const theta = this.aimPitch + Math.atan2(oy, ox);
+    const u: Pt = { x: f * Math.cos(theta), y: Math.sin(theta) };
+    const down: Pt = { x: f * u.y, y: -f * u.x }; // perpendicular, toward the ground when level
+    const along = (d: number, drop = 0): Pt => ({ x: pivot.x + u.x * d + down.x * drop, y: pivot.y + u.y * d + down.y * drop });
+    const tip = along(restLen);
     const rifleLen = 0.62;
-    place(p.rifle!, tipX - f * rifleLen * 0.5, muzzleY, 0.17);
-    place(p.stock!, tipX - f * (rifleLen + 0.08), muzzleY - 0.015, 0.17);
-    place(p.mag!, tipX - f * 0.34, muzzleY - 0.1, 0.17);
+    const rz = Math.atan2(u.y, u.x);
+    const rifleZ = 0.17 - prone * 0.05;
+    const rifleC = along(restLen - rifleLen * 0.5);
+    place(p.rifle!, rifleC.x, rifleC.y, rifleZ, rz);
+    const stockC = along(restLen - rifleLen - 0.08, 0.015);
+    place(p.stock!, stockC.x, stockC.y, rifleZ, rz);
+    const magC = along(restLen - 0.34, 0.1);
+    place(p.mag!, magC.x, magC.y, rifleZ, rz);
 
     // Arms: hands on the foregrip and the pistol grip, drawn in front of the torso.
-    const armFromShoulder = (m: Mesh, sx: number, sy: number, gx: number, gy: number, z: number) => {
-      const len = Math.max(0.24, Math.hypot(gx - sx, gy - sy));
-      const ang = Math.atan2(gx - sx, -(gy - sy));
-      m.position.set((sx + gx) / 2, (sy + gy) / 2, z);
-      m.rotation.set(0, 0, ang);
+    const handFront = along(restLen - 0.28, 0.07);
+    const handBack = along(restLen - 0.52, 0.12);
+    const arm = (m: Mesh, from: Pt, to: Pt, z: number) => {
+      const len = Math.max(0.24, Math.hypot(to.x - from.x, to.y - from.y));
+      m.position.set((from.x + to.x) / 2, (from.y + to.y) / 2, z);
+      m.rotation.set(0, 0, Math.atan2(to.x - from.x, -(to.y - from.y)));
       m.scale.y = len / 0.42;
     };
-    armFromShoulder(p.armFront!, f * 0.06, shoulderY - 0.02, tipX - f * 0.28, muzzleY - 0.07, 0.2);
-    armFromShoulder(p.armBack!, f * -0.08, shoulderY - 0.02, tipX - f * 0.52, muzzleY - 0.12, 0.19);
+    arm(p.armFront!, { x: shoulder.x + f * 0.05, y: shoulder.y - 0.02 }, handFront, 0.2);
+    arm(p.armBack!, { x: shoulder.x - f * 0.09, y: shoulder.y - 0.02 }, handBack, 0.19);
+    void tip;
 
     // Mirror the outline copy.
     for (const [name, mesh] of Object.entries(this.parts)) {
@@ -234,6 +300,8 @@ export class SoldierModel {
     for (const mesh of Object.values(this.outlineParts)) (mesh.material as Material).dispose();
   }
 }
+
+const clamp01 = (v: number): number => Math.min(1, Math.max(0, v));
 
 /** Dropped equipment bag. */
 export function makeBag(): Group {

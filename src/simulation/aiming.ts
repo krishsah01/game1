@@ -57,10 +57,13 @@ export interface AimSituation {
   stance: Stance;
   aiming: boolean;
   braced: boolean;
+  /** Going over an obstacle: no aim control until the body lands. */
+  vaulting: boolean;
 }
 
 /** Situational amplitude before heat and settling (metres). */
 export function situationalAmplitude(base: number, s: AimSituation): { amplitude: number; label: string } {
+  if (s.vaulting) return { amplitude: base * SWAY.vault, label: 'VAULTING' };
   if (s.braced && !s.moving) return { amplitude: base * SWAY.bracedFactor, label: 'BRACED' };
   let mult = SWAY.still;
   let label = 'STILL';
@@ -79,6 +82,9 @@ export function situationalAmplitude(base: number, s: AimSituation): { amplitude
   if (s.stance === 'CROUCHED') {
     mult *= SWAY.crouchFactor;
     label += ' / CROUCHED';
+  } else if (s.stance === 'PRONE') {
+    mult *= SWAY.proneFactor;
+    label += ' / PRONE';
   }
   if (s.aiming && !(s.moving && s.moveMode === 'SPRINT')) {
     mult *= SWAY.aimFactor;

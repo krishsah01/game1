@@ -9,26 +9,30 @@
  *
  * Depth is world Z throughout (see shared/types.ts).
  */
-import { aabbFromBounds, aabbFromCenterSize, type Aabb } from '../shared/geometry.ts';
+import { aabbFromBounds, aabbFromCenterSize, add, length, rayAabb, scale, sub, type Aabb } from '../shared/geometry.ts';
 import {
   ACTOR_HEIGHT,
+  ANCHORS,
   BODY_DEPTH,
   BODY_WIDTH,
   CROUCH_SPEED_FACTOR,
   DEPTH_SPEED,
   FIXED_STEP,
+  LANE_HALF_WIDTH,
   MAGAZINE_SIZE,
   MAX_FRAME_DELTA,
   MOVE_SPEED,
+  PRONE_SPEED_FACTOR,
+  VAULT,
   depthWord,
   type StanceAnchors,
 } from '../shared/tuning.ts';
 import type { Bounds, DemoConfig, DemoSession, DepthZone, EntityKind, MoveMode, Scenario, SceneSeed, Stance, Vec3 } from '../shared/types.ts';
 import { applyRecoil, createAimState, currentDepthOffset, setSelectedDepth, stepSelectedDepth, updateAim, type AimState } from './aiming.ts';
-import { coverCandidates, evaluateCover, type CoverCandidate, type CoverEvaluation } from './cover.ts';
-import { emptyHeld, type Command, type CoverIntent, type HeldInput } from './input.ts';
+import { coverCandidates, evaluateCover, findVaultableAhead, type CoverCandidate, type CoverEvaluation } from './cover.ts';
+import { emptyHeld, type Command, type CoverIntent, type DepthLane, type HeldInput } from './input.ts';
 import { createKnowledge, expireLastKnown, updateObservation, type KnowledgeState, type LastKnownRecord } from './knowledge.ts';
-import { blockersFromColliders, moveBody, zoneAt, type MovementBlocker } from './movement.ts';
+import { blockersFromColliders, bodyBlockedBy, depthPathBlockedBy, moveBody, zoneAt, zoneFarZ, type MovementBlocker } from './movement.ts';
 import { createNoise, playerNoiseLabel, updateNoise, type NoisePulse, type NoiseState } from './noise.ts';
 import { createObjective, updateObjective, type ObjectiveState } from './objective.ts';
 import { cameraFacing, cameraObserver, cameraStatusLabel, type ReconState } from './recon.ts';
@@ -47,6 +51,17 @@ import {
 
 export type ViewMode = 'player' | 'developer';
 
+/** Scripted vault over an `isVaultable` obstacle: a canned move, not physics. */
+export interface VaultState {
+  obstacleId: string;
+  fromX: number;
+  toX: number;
+  /** Feet height at the apex (obstacle top + hop). */
+  apexY: number;
+  elapsed: number;
+  duration: number;
+}
+
 export interface PlayerState {
   position: Vec3;
   facingX: -1 | 1;
@@ -57,6 +72,12 @@ export interface PlayerState {
   braced: boolean;
   coverIntent: CoverIntent;
   zone: DepthZone | null;
+  /** Requested depth lane: LANE (z = 0) or FAR (far edge of the current zone). */
+  depthLane: DepthLane;
+  /** Target z while gliding between lanes; null once settled. */
+  depthTargetZ: number | null;
+  /** Vault in progress, or null. */
+  vault: VaultState | null;
   ammo: number;
   shotsFired: number;
   lastBlockedBy: string | null;
@@ -107,7 +128,7 @@ export interface Presentation {
   paused: boolean;
   scene: SceneSeed;
   config: DemoConfig;
-  player: PlayerState & { noiseLabel: string; zoneLabel: string | null; coverId: string | null };
+  player: PlayerState & { noiseLabel: string; zoneLabel: string | null; zoneFarZ: number | null; coverId: string | null; vaultProgress: number | null };
   /** In player mode only observed entities are listed. */
   entities: EntityView[];
   lastKnown: { record: LastKnownRecord; age: number }[];
@@ -228,7 +249,7 @@ export class World {
     this.cameraSight = [];
     const position = { ...playerSeed.position };
     const cover = evaluateCover(
-      { position, facingX: playerSeed.facingX, stance: playerSeed.stance, moving: false, observeHeld: false, aimHeld: false, sprinting: false },
+      { position, facingX: playerSeed.facingX, stance: playerSeed.stance, moving: false, observeHeld: false, aimHeld: false, sprinting: false, aimPitch: 0, vaulting: false },
       this.coverCands,
     );
     this.player = {
@@ -241,6 +262,9 @@ export class World {
       braced: false,
       coverIntent: null,
       zone: zoneAt(this.scene.depthZones, position),
+      depthLane: Math.abs(position.z) > LANE_HALF_WIDTH ? 'FAR' : 'LANE',
+      depthTargetZ: null,
+      vault: null,
       ammo: MAGAZINE_SIZE,
       shotsFired: 0,
       lastBlockedBy: null,
@@ -274,16 +298,38 @@ export class World {
     const p = this.player;
     switch (cmd.type) {
       case 'toggleCrouch':
+        if (p.vault) return null;
+        // From prone, C rises to a crouch; from a crouch it stands.
         p.stance = p.stance === 'CROUCHED' ? 'STANDING' : 'CROUCHED';
-        if (p.stance === 'STANDING') p.coverIntent = null;
+        if (p.stance !== 'CROUCHED') p.coverIntent = null;
+        return null;
+      case 'toggleProne':
+        if (p.vault) return null;
+        p.stance = p.stance === 'PRONE' ? 'STANDING' : 'PRONE';
+        p.coverIntent = null;
+        if (p.stance === 'PRONE') p.braced = false;
         return null;
       case 'setStance':
+        if (p.vault) return null;
         p.stance = cmd.stance;
-        if (p.stance === 'STANDING') p.coverIntent = null;
+        if (p.stance !== 'CROUCHED') p.coverIntent = null;
+        if (p.stance === 'PRONE') p.braced = false;
         return null;
       case 'setMoveMode':
         p.moveMode = cmd.mode;
         if (cmd.mode === 'SPRINT') p.braced = false;
+        return null;
+      case 'cycleMoveMode': {
+        const order: MoveMode[] = ['WALK', 'COMBAT', 'SPRINT'];
+        p.moveMode = order[(order.indexOf(p.moveMode) + 1) % order.length]!;
+        if (p.moveMode === 'SPRINT') p.braced = false;
+        return null;
+      }
+      case 'setDepthLane':
+        this.requestDepthLane(cmd.lane);
+        return null;
+      case 'vault':
+        this.startVault();
         return null;
       case 'fire':
         return this.fire(false);
@@ -347,6 +393,9 @@ export class World {
         p.facingX = cmd.facingX;
         p.braced = false;
         p.coverIntent = null;
+        p.vault = null;
+        p.depthTargetZ = null;
+        p.depthLane = Math.abs(cmd.z) > LANE_HALF_WIDTH ? 'FAR' : 'LANE';
         this.pushLog(`Player moved to x=${cmd.x.toFixed(1)}.`);
         return null;
       default:
@@ -374,6 +423,129 @@ export class World {
     }
     p.braced = true;
     this.pushLog(`Braced on ${p.cover.braceable.id}.`);
+  }
+
+  /**
+   * The rifle never fires from inside a solid: if the pivot→muzzle segment
+   * enters a shot-blocking collider, the muzzle is pulled back to just before
+   * that face (the rifle is pressed against the cover). Actors never clamp it.
+   */
+  private clampMuzzle(cover: CoverEvaluation): void {
+    const dir = sub(cover.muzzle, cover.pivot);
+    const len = length(dir);
+    if (len < 1e-6) return;
+    const unit = scale(dir, 1 / len);
+    let nearest = len;
+    for (const t of this.staticShotTargets) {
+      const r = rayAabb(cover.pivot, unit, t.box, len);
+      if (r && r.tEntry < nearest) nearest = r.tEntry;
+    }
+    if (nearest < len) {
+      cover.muzzle = add(cover.pivot, scale(unit, Math.max(0, nearest - 0.03)));
+      cover.muzzleClamped = true;
+    }
+  }
+
+  /** Player-safe transient HUD feedback (never reveals hidden state). */
+  private feedback(text: string): void {
+    this.message = { text, simTime: this.simTime };
+  }
+
+  /**
+   * On/off depth move. FAR glides to the far edge of the zone the body stands
+   * in; LANE glides back to z = 0. The whole path must be clear up front, so the
+   * body never ends up stranded between lanes.
+   */
+  private requestDepthLane(lane: DepthLane): void {
+    const p = this.player;
+    if (p.vault) {
+      this.feedback('VAULTING · depth move ignored');
+      return;
+    }
+    const zone = p.zone ?? zoneAt(this.scene.depthZones, p.position);
+    let targetZ = 0;
+    if (lane === 'FAR') {
+      if (!zone) {
+        this.feedback('NO DEPTH ZONE HERE');
+        this.pushLog('Depth move refused: the body is not inside a depth zone.');
+        return;
+      }
+      targetZ = zoneFarZ(zone);
+    }
+    if (Math.abs(p.position.z - targetZ) < 1e-3) {
+      p.depthLane = lane;
+      p.depthTargetZ = null;
+      return;
+    }
+    const blocker = depthPathBlockedBy(p.position, p.cover.anchors.height, targetZ, this.movementBlockers);
+    if (blocker) {
+      this.feedback(`DEPTH PATH BLOCKED · ${blocker}`);
+      this.pushLog(`Depth move refused: ${blocker} is in the way.`);
+      return;
+    }
+    p.depthLane = lane;
+    p.depthTargetZ = targetZ;
+    p.braced = false;
+    p.coverIntent = null;
+    this.pushLog(lane === 'FAR' ? `Depth move: to the far edge of ${zone!.label} (z ${targetZ.toFixed(2)}).` : 'Depth move: back to the lane (z 0).');
+  }
+
+  /** Vault the `isVaultable` obstacle directly ahead (standing or crouched, not prone). */
+  private startVault(): void {
+    const p = this.player;
+    if (p.vault) return;
+    if (p.stance === 'PRONE') {
+      this.feedback('STAND OR CROUCH TO VAULT');
+      return;
+    }
+    if (p.depthTargetZ !== null) {
+      this.feedback('DEPTH MOVE IN PROGRESS');
+      return;
+    }
+    const obstacle = findVaultableAhead(p.position, p.facingX, this.coverCands);
+    if (!obstacle) {
+      this.feedback('NOTHING TO VAULT HERE');
+      this.pushLog('Vault refused: no vaultable obstacle within reach ahead.');
+      return;
+    }
+    const f = p.facingX;
+    const farFace = f > 0 ? obstacle.box.max.x : obstacle.box.min.x;
+    const toX = farFace + f * (BODY_WIDTH / 2 + VAULT.clearance);
+    const landingHeight = p.stance === 'CROUCHED' ? ANCHORS.crouched.height : ANCHORS.standing.height;
+    const landingBlocker = bodyBlockedBy({ x: toX, y: 0, z: p.position.z }, landingHeight, this.movementBlockers);
+    if (landingBlocker) {
+      this.feedback(`LANDING BLOCKED · ${landingBlocker}`);
+      this.pushLog(`Vault refused: landing spot blocked by ${landingBlocker}.`);
+      return;
+    }
+    const apexY = obstacle.box.max.y + VAULT.hop;
+    const apex = { x: (obstacle.box.min.x + obstacle.box.max.x) / 2, y: apexY, z: p.position.z };
+    const headroomBlocker = bodyBlockedBy(apex, ANCHORS.vault.height, this.movementBlockers, obstacle.id);
+    if (headroomBlocker) {
+      this.feedback(`NO HEADROOM · ${headroomBlocker}`);
+      this.pushLog(`Vault refused: ${headroomBlocker} leaves no headroom above ${obstacle.id}.`);
+      return;
+    }
+    p.vault = { obstacleId: obstacle.id, fromX: p.position.x, toX, apexY, elapsed: 0, duration: VAULT.duration };
+    p.braced = false;
+    p.coverIntent = null;
+    this.pushLog(`Vaulting ${obstacle.id} (top ${obstacle.box.max.y.toFixed(2)} m, landing x ${toX.toFixed(2)}).`);
+  }
+
+  /** Advances the scripted vault: eased travel in X, quick rise/hold/descent in Y. */
+  private advanceVault(dt: number): void {
+    const p = this.player;
+    const v = p.vault!;
+    v.elapsed = Math.min(v.duration, v.elapsed + dt);
+    const t = v.elapsed / v.duration;
+    const ease = t * t * (3 - 2 * t);
+    const lift = Math.sin((Math.PI / 2) * Math.min(1, Math.max(0, Math.min(t / 0.3, (1 - t) / 0.3))));
+    p.position = { x: v.fromX + (v.toX - v.fromX) * ease, y: v.apexY * lift, z: p.position.z };
+    if (v.elapsed >= v.duration) {
+      p.position = { x: v.toX, y: 0, z: p.position.z };
+      p.vault = null;
+      this.pushLog(`Landed beyond ${v.obstacleId}.`);
+    }
   }
 
   // ------------------------------------------------------------------ stepping
@@ -407,35 +579,68 @@ export class World {
     }
 
     // ---- 1. player intent -------------------------------------------------
-    if (held.pointerWorld) {
-      const dx = held.pointerWorld.x - p.position.x;
-      if (dx > FACING_HYSTERESIS) p.facingX = 1;
-      else if (dx < -FACING_HYSTERESIS) p.facingX = -1;
-    } else if (held.moveX !== 0) {
-      p.facingX = held.moveX;
+    const vaulting = p.vault !== null;
+    if (!vaulting) {
+      if (held.pointerWorld) {
+        const dx = held.pointerWorld.x - p.position.x;
+        if (dx > FACING_HYSTERESIS) p.facingX = 1;
+        else if (dx < -FACING_HYSTERESIS) p.facingX = -1;
+      } else if (held.moveX !== 0) {
+        p.facingX = held.moveX;
+      }
     }
-    const wantsMove = held.moveX !== 0 || held.moveZ !== 0;
+    const wantsMove = held.moveX !== 0;
     if (wantsMove && p.coverIntent) p.coverIntent = null;
     const observeHeld = held.observe || p.coverIntent === 'observe';
     const aimHeld = held.aim || p.coverIntent === 'aimOver';
-    const sprintMode = p.moveMode === 'SPRINT';
+    const sprintMode = p.moveMode === 'SPRINT' && p.stance !== 'PRONE';
     const standingAim = aimHeld && p.stance === 'STANDING' && !sprintMode;
+    // Requested aim pitch: angle from the rifle pivot to the pointer, in the facing frame.
+    let aimPitch = 0;
+    if (held.pointerWorld) {
+      const pivot = p.cover.pivot;
+      const forward = Math.max(0.05, p.facingX * (held.pointerWorld.x - pivot.x));
+      aimPitch = Math.atan2(held.pointerWorld.y - pivot.y, forward);
+    }
 
     let speed = MOVE_SPEED[p.moveMode];
     if (p.stance === 'CROUCHED') speed *= CROUCH_SPEED_FACTOR;
+    else if (p.stance === 'PRONE') speed = MOVE_SPEED.WALK * PRONE_SPEED_FACTOR;
     if (standingAim) speed = Math.min(speed, MOVE_SPEED.WALK);
-    const vx = held.moveX * speed;
-    const vz = -held.moveZ * DEPTH_SPEED; // +moveZ = into the screen = -Z
+    const vx = vaulting ? 0 : held.moveX * speed;
 
     // ---- 2. movement ------------------------------------------------------
-    if (dt > 0 && (vx !== 0 || vz !== 0)) {
-      const result = moveBody(p.position, p.cover.anchors.height, vx, vz, dt, this.movementBlockers, this.scene.depthZones);
-      p.position = result.position;
-      p.lastBlockedBy = result.blockedX ?? result.blockedZ;
-      p.moving = Math.abs(result.movedX) > 1e-6 || Math.abs(result.movedZ) > 1e-6;
-    } else {
-      p.moving = false;
+    if (vaulting) {
+      if (dt > 0) this.advanceVault(dt);
+      p.moving = true;
       p.lastBlockedBy = null;
+    } else {
+      // Depth glide toward the requested lane (on/off depth: no held axis).
+      let vz = 0;
+      if (p.depthTargetZ !== null && dt > 0) {
+        const dz = p.depthTargetZ - p.position.z;
+        vz = Math.abs(dz) <= DEPTH_SPEED * dt ? dz / dt : Math.sign(dz) * DEPTH_SPEED;
+      }
+      if (dt > 0 && (vx !== 0 || vz !== 0)) {
+        const result = moveBody(p.position, p.cover.anchors.height, vx, vz, dt, this.movementBlockers, this.scene.depthZones);
+        p.position = result.position;
+        p.lastBlockedBy = result.blockedX ?? result.blockedZ;
+        p.moving = Math.abs(result.movedX) > 1e-6 || Math.abs(result.movedZ) > 1e-6;
+        if (p.depthTargetZ !== null) {
+          if (Math.abs(p.position.z - p.depthTargetZ) < 1e-3) {
+            p.position.z = p.depthTargetZ;
+            p.depthTargetZ = null;
+            this.pushLog(`Depth settled at z ${p.position.z.toFixed(2)} (${depthWord(p.position.z)}).`);
+          } else if (result.blockedZ) {
+            p.depthTargetZ = null;
+            p.depthLane = Math.abs(p.position.z) <= LANE_HALF_WIDTH ? 'LANE' : 'FAR';
+            this.feedback(`DEPTH PATH BLOCKED · ${result.blockedZ}`);
+          }
+        }
+      } else {
+        p.moving = false;
+        p.lastBlockedBy = null;
+      }
     }
     p.zone = zoneAt(this.scene.depthZones, p.position);
     const justStopped = this.wasMoving && !p.moving;
@@ -444,9 +649,20 @@ export class World {
 
     // ---- 3. cover + anchors ---------------------------------------------
     p.cover = evaluateCover(
-      { position: p.position, facingX: p.facingX, stance: p.stance, moving: p.moving, observeHeld, aimHeld, sprinting: sprintMode && p.moving },
+      {
+        position: p.position,
+        facingX: p.facingX,
+        stance: p.stance,
+        moving: p.moving,
+        observeHeld,
+        aimHeld,
+        sprinting: sprintMode && p.moving,
+        aimPitch,
+        vaulting: p.vault !== null,
+      },
       this.coverCands,
     );
+    this.clampMuzzle(p.cover);
     if (!p.cover.braceable) p.braced = false;
 
     // ---- 4. scripted actors --------------------------------------------
@@ -494,7 +710,7 @@ export class World {
     }
 
     // ---- 8. aiming -------------------------------------------------------
-    updateAim(this.aim, dt, cfg, { moving: p.moving, moveMode: p.moveMode, stance: p.stance, aiming: p.cover.aiming, braced: p.braced }, justStopped);
+    updateAim(this.aim, dt, cfg, { moving: p.moving, moveMode: p.moveMode, stance: p.stance, aiming: p.cover.aiming, braced: p.braced, vaulting: p.vault !== null }, justStopped);
 
     // ---- 9. noise --------------------------------------------------------
     if (dt > 0) {
@@ -605,6 +821,11 @@ export class World {
 
   private fire(test: boolean): ShotResult | null {
     const p = this.player;
+    if (!test && p.vault) {
+      this.pushLog('Cannot fire while vaulting.');
+      this.feedback('VAULTING · cannot fire');
+      return null;
+    }
     if (!test && p.cover.state === 'hidden') {
       this.pushLog('Blind fire is disabled in the hidden state. Observe or aim over cover first.');
       this.message = { text: 'BLIND FIRE DISABLED · observe or aim over', simTime: this.simTime };
@@ -690,9 +911,11 @@ export class World {
       config: this.config,
       player: {
         ...p,
-        noiseLabel: playerNoiseLabel(p.moving, p.moveMode),
+        noiseLabel: playerNoiseLabel(p.moving && !p.vault, p.moveMode),
         zoneLabel: p.zone?.label ?? null,
+        zoneFarZ: p.zone ? zoneFarZ(p.zone) : null,
         coverId: p.cover.nearCover?.id ?? null,
+        vaultProgress: p.vault ? p.vault.elapsed / p.vault.duration : null,
       },
       entities,
       lastKnown: k.lastKnown.map((record) => ({ record, age: this.simTime - record.simTime })),

@@ -2,6 +2,7 @@
  * Local GraphQL Yoga HTTP server (development API).
  *
  *   npm run dev:api   → http://127.0.0.1:4000/graphql  (GraphiQL at the same URL)
+ *   API_PORT=4001 npm run dev   → API on 4001 and the Vite proxy follows (WEB_PORT moves the app)
  *
  * Binds to loopback only. The Vite dev/preview server proxies /graphql here so
  * the browser always uses a same-origin URL. Sessions are in memory and are
@@ -12,7 +13,7 @@ import { createYoga } from 'graphql-yoga';
 import { buildSchema } from './schema.ts';
 import { createStore } from './store.ts';
 
-const PORT = Number(process.env.PORT ?? 4000);
+const PORT = Number(process.env.API_PORT ?? process.env.PORT ?? 4000);
 const HOST = process.env.HOST ?? '127.0.0.1';
 
 const store = createStore();

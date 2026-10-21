@@ -31,14 +31,16 @@ npm run dev
 | http://127.0.0.1:4000/graphql | local GraphQL Yoga API, with GraphiQL in the browser |
 
 Both services bind to loopback only. The browser always talks to the
-same-origin `/graphql` URL.
+same-origin `/graphql` URL. To run a second checkout beside the first, move
+both ports: `API_PORT=4001 WEB_PORT=5174 npm run dev` (the Vite proxy follows
+`API_PORT`).
 
 Other commands:
 
 | Command | Purpose |
 | --- | --- |
 | `npm run typecheck` | strict TypeScript check of app, server, tests and scripts |
-| `npm test` | 63 focused vitest tests (geometry, cover, visibility, recon, aiming, shots, movement, objective, GraphQL contract, session controller, camera projection) |
+| `npm test` | 75 focused vitest tests (geometry, cover, visibility, recon, aiming, shots, movement, stance/vault/arm-aim, objective, GraphQL contract, session controller, camera projection) |
 | `npm run build` | production build into `dist/` |
 | `npm run preview` | serves `dist/` on http://127.0.0.1:4173 **with** the API (`vite preview` proxies `/graphql` to the Yoga server it starts alongside) |
 | `npm run check` | typecheck + tests + build |
@@ -77,12 +79,20 @@ shared map; each is a real GraphQL session. A guided-tour button walks through
 them with captions. Player view and Developer view (`V`) are separate
 presentations of the same simulation.
 
+### New in prototype v0.2 (Linear 2DS-2)
+
+- **On/off depth.** There is no continuous depth axis any more. Inside a marked depth zone, `W` glides the body to the zone's far edge and `S` glides it back to the z = 0 lane (3.5 m/s, collision-checked up front so the body is never stranded between lanes). Nothing ever moves toward the camera. Outside a zone `W` is refused with a HUD message.
+- **Prone (`Z`)** is a third stance: 0.5 m collider, eye at 0.42 m, slow crawl at a fixed speed, steadiest sway after bracing, cannot vault. `C` from prone rises to a crouch.
+- **Vault (`Space`)** goes over an `isVaultable` obstacle directly ahead (standing or crouched, not prone): a 0.7 s scripted move whose landing spot and headroom are collision-checked first. Both low walls (`barrier-a` at station A, the new `barrier-ab` between A and B) are vaultable and **span the entire depth axis**, so over the top is the only way past. Mid-vault the head is up: the target beyond the wall is observed; firing is disabled.
+- **Arms follow the aim point.** The rifle swings around a per-stance pivot by the pitch from the pivot to the pointer (clamped: ±70° standing, 65°/60° crouched, 25°/8° prone). The mechanical muzzle anchor moves with the visible barrel tip, so the firing line starts where the barrel ends. Hidden and observe keep the rifle lowered. A barrel that would enter a solid is pulled back to that face (`muzzleClamped`), so a rifle pressed against cover can no longer fire from inside it.
+- **Keys moved to make room:** `F` (hold) observes over cover (was Space); `Tab` cycles walk → combat → sprint (was 1/2/3).
+
 Mechanics (all in plain TypeScript under `src/simulation/`, independent of
 React and Three.js):
 
 - **Fixed-step simulation** at 60 Hz with clamped catch-up, pause/step, pause on focus loss, held inputs cleared on blur.
-- **Movement** with per-axis box collision against every movement-blocking collider; three speed tiers; crouch; contextual depth travel only inside marked zones, and horizontal travel confined to the zone while off the default lane.
-- **Cover**: `hidden` / `observe` / `aimOver` are mechanical states with separate eye and muzzle anchors (`src/shared/tuning.ts` → `ANCHORS`). Observe raises the eye above the 1.10 m barrier while the muzzle stays at 0.86 m; aim-over raises both. Blind fire is disabled while hidden. "Test firing line" fires a no-ammo probe that stops on the barrier.
+- **Movement** with per-axis box collision against every movement-blocking collider; three speed tiers; crouch and prone; on/off depth (lane ↔ far edge) only inside marked zones, with horizontal travel confined to the zone while off the default lane; scripted vault over flagged obstacles.
+- **Cover**: `hidden` / `observe` / `aimOver` are mechanical states with separate eye and muzzle anchors (`src/shared/tuning.ts` → `ANCHORS`). Observe raises the eye above the 1.10 m wall while the muzzle stays at 0.86 m; aim-over raises both. Blind fire is disabled while hidden. "Test firing line" fires a no-ammo probe that stops on the wall. In the free and aim-over states the muzzle additionally swings around the rifle pivot by the aim pitch, and is clamped to the first solid face along the pivot→muzzle segment.
 - **Visibility**: each dynamic entity exposes head/chest/pelvis samples (gear: top/mid). A sample is observed when it is in range, inside the observer's field of view, not blocked by any sight-blocking collider and not behind active smoke. One clear sample publishes the entity (an exposed head is enough), after 3 confirmation ticks on the way in; loss of sight is published immediately. Static architecture is always drawn and only dimmed by a coarse probe-based "lit" factor.
 - **Knowledge**: observed set with source ids (`DIRECT`, `CAM 01`); frozen, immutable last-known records for enemy actors with simulation-time age, configurable expiry, pause-aware; hollow non-humanoid marker.
 - **Recon**: one pre-placed camera with its own position, direction, 70° FOV and 11 m range, same occlusion tests; `ONLINE` contributes, `JAMMED` / `DESTROYED` / `OFFLINE` contribute nothing. Its device mesh is drawn only when it is itself observed; the HUD link status is player-owned UI.
@@ -95,17 +105,18 @@ React and Three.js):
 ### Explicit simplifications
 
 - Actors are box collision proxies (0.5 × height × 0.5 m); scripted actors follow authored routes and do not collide.
-- The rifle is held level in every stance; the shot leaves the fixed muzzle anchor toward the aim point (the visual rifle does not pitch). Anchors are never cosmetically moved.
+- The rifle pitches around a single pivot per stance; the eye does not pitch, and the mechanical muzzle is exactly the visible barrel tip. Anchors are never cosmetically moved.
+- The prone collider keeps the 0.5 × 0.5 m footprint (covering head and shoulders, 0.5 m tall); the trailing legs are visual only. The vault is a canned 0.7 s move, not physics: its landing spot and headroom are checked before it starts, not every tick.
 - Static-geometry dimming is a coarse per-object probe test, refreshed every 6 ticks; dynamic-entity visibility is the authoritative per-sample test.
 - Doors are closed and fixed; the station-B doorway is an opening in the partition.
-- One observer source besides the player (the camera). Drones, sensors, teammates, prone, vaulting, climbing, networking and server authority are deliberately not built.
+- One observer source besides the player (the camera). Drones, sensors, teammates, climbing, networking and server authority are deliberately not built.
 - Decorative meshes (ceiling beams, pipe, wall stripe, light fixtures, slot outline) carry no collision. The near-side door jamb is rendered as a translucent section cut so the slot stays readable; its collider is solid.
 - Audio is visual-only (no sound files).
 
 ## 3. Two-minute tour
 
 1. **Hidden battlefield** (preset 1). The whole room is readable, including the far room behind the partition, but no enemy or bag is drawn there. Press `V`: developer view shows the magenta wireframe truth (patrol + bag), the sight rays stopping at the partition and the omniscient top view below the stage. Press `V` again: everything omniscient disappears at once.
-2. **Exposure ladder** (preset 2, developer view). Hidden: eye 0.98 m and muzzle 0.80 m, every ray ends on the barrier. Hold `Space` (or click **Observe**): eye 1.24 m clears the 1.10 m top, the target's head and chest become visible, the amber firing line still ends on concrete. Click **Test firing line**: the probe strikes `barrier-a` at 0.12 m. Hold the right mouse button (or click **Aim over**): eye 1.36 m and muzzle 1.24 m both clear; fire and the tracer reaches the target.
+2. **Exposure ladder** (preset 2, developer view). Hidden: eye 0.98 m and muzzle 0.80 m, every ray ends on the wall. Hold `F` (or click **Observe**): eye 1.24 m clears the 1.10 m top, the target's head and chest become visible, the amber firing line still ends on concrete. Click **Test firing line**: the probe strikes `barrier-a` at 0.12 m. Hold the right mouse button (or click **Aim over**): eye 1.36 m and muzzle 1.24 m both clear; fire and the tracer reaches the target.
 3. **Lost contact** (preset 4). CAM 01 is live and reveals the enemy in the far room. Click **JAMMED** (a real `updateConfig` mutation, revision 2). The enemy vanishes immediately and a hollow `LAST SEEN n s` marker stays where contact was lost while the enemy, as the developer view shows, walks away into the camera blind spot. Pause (`P`): the age stops.
 4. **Depth shot** (preset 6). Put the mouse on the target through the slot. Press `E` or click **FAR**: the same screen aim now strikes the far jamb. Click **MID** and fire: a hit. Watch the reticle dot swing left and right: that is the world-Z offset that will be sampled when you click. Sprint, then stop: the amplitude settles back over about a second. `B` braces on the door frame for the smallest amplitude.
 
@@ -114,12 +125,16 @@ React and Three.js):
 | Input | Action |
 | --- | --- |
 | A / D, ← → | move left / right |
-| W / S | step into the screen (FAR) / toward the camera (NEAR), only inside a marked depth zone |
-| 1 / 2 / 3 | walk (quiet) / combat move (moderate) / sprint (loud, unstable; cancels brace and aim) |
-| C | toggle crouch (crouched at waist-high cover = hidden) |
-| Space (hold) | observe above cover |
+| W / ↑ | depth ON: glide to the far edge of the depth zone you stand in (refused outside a zone) |
+| S / ↓ | depth OFF: glide back to the z = 0 lane; nothing ever moves toward the camera |
+| Space | vault the `isVaultable` low wall directly ahead (standing or crouched) |
+| Tab | cycle walk (quiet) → combat move (moderate) → sprint (loud, unstable; cancels brace and aim) |
+| C | toggle crouch (crouched at waist-high cover = hidden); from prone, rise to a crouch |
+| Z | toggle prone (slow crawl, lowest profile, steadiest aim, cannot vault) |
+| F (hold) | observe above cover |
 | Right mouse (hold) | aim; from crouched cover: aim over |
-| Left mouse | fire (disabled while hidden) |
+| Left mouse | fire (disabled while hidden or vaulting) |
+| Mouse height | the arms and rifle swing toward the pointer; the shot leaves the barrel tip |
 | Q / E | selected aim depth − / + (0.25 m steps, −1.5…+1.0 m); never auto-locks to an enemy |
 | B | brace on cover within reach (not while moving or sprinting) |
 | V | developer view |
@@ -134,7 +149,7 @@ page scrolling are suppressed only then.
 
 Where to tune:
 
-- `src/shared/tuning.ts`: anchors per stance, speeds, lane width, cover reach, body samples, visibility threshold and confirmation ticks, sway multipliers, recoil, depth range, noise profiles.
+- `src/shared/tuning.ts`: anchors per stance (including the rifle pivot), aim-pitch limits, speeds, prone crawl factor, lane width and depth glide speed, cover and vault reach, body samples, visibility threshold and confirmation ticks, sway multipliers, recoil, depth range, noise profiles.
 - `src/shared/scenarios.ts`: the map (every collider, zone, smoke and capture bounds, the camera) and the seven presets with their default configuration.
 - `DemoConfig` (vision range/FOV, last-known expiry, camera status, smoke, sway amplitude/frequency, settle time, capture time) lives in the GraphQL session and is changed through the inspector sliders and buttons (`updateConfig`), validated by `server/resolvers.ts` (`CONFIG_RANGES`).
 
@@ -189,8 +204,8 @@ Then `src/shared/scenarios.ts` (the map and presets), `server/resolvers.ts`
 
 ## 7. Acceptance results
 
-Automated evidence is `npm test` (63 tests, all passing at the time of
-writing) and the headless walkthrough `npm run screenshots` (23 frames in
+Automated evidence is `npm test` (75 tests, all passing at the time of
+writing) and the headless walkthrough `npm run screenshots` (29 frames in
 `docs/screenshots/`, 0 console or page errors). Manual checks were done in
 headless Chromium with SwiftShader WebGL.
 
@@ -202,7 +217,7 @@ headless Chromium with SwiftShader WebGL.
 | Scene is interactive 3D, not an image | verified | Three.js scene with procedural meshes; keyboard movement in `scripts/screenshots.ts` (preset 7 walks into the zone) |
 | Main camera strictly perpendicular through movement, resize, reset and preset switching | verified | `fitOrthographic` is the only camera mutation; position/look-at share X and Y; `tests/camera-projection.test.ts` |
 | Equal-size actors at different depths project equally | verified | `tests/camera-projection.test.ts` |
-| Player cannot walk through cover or jambs; depth constrained | verified | `tests/movement.test.ts` (barrier, slot on-lane vs off-lane, zone clamping, doorway lane) |
+| Player cannot walk through cover or jambs; depth constrained | verified | `tests/movement.test.ts` (low wall, slot on-lane vs FAR, zone confinement, doorway lane, refused/blocked depth moves) |
 | Focus loss clears controls; UI interactions do not fire or move | verified | `InputController.clear` on blur/visibility change; keys ignored unless the canvas owns input; `tests/movement.test.ts` (clearHeld) |
 
 ### Observation and cover
@@ -241,6 +256,16 @@ headless Chromium with SwiftShader WebGL.
 | Hidden target produces no omniscient player-mode hit marker | verified | `tests/visibility.test.ts` (smoke shot: `publicEnd` not on the actor, entity absent from player snapshot) |
 | Capture advances/pauses/contests/resets correctly | verified | `tests/objective.test.ts`; screenshots 07a–07c |
 
+### Prototype v0.2 (2DS-2)
+
+| Item | Result | Evidence |
+| --- | --- | --- |
+| Depth is on/off: W glides to the zone's far edge, S back to the lane, never toward the camera; refused outside a zone or when the path is blocked | verified | `tests/movement.test.ts`; screenshots 10e, 10f |
+| Prone (Z): anchors, collider height, fixed crawl speed, lower sway than crouch, C rises to crouch | verified | `tests/stance-vault.test.ts`; screenshot 10a |
+| Vault (Space) over flagged full-depth walls; head exposed mid-vault, no firing, lands beyond; refused when prone, nothing ahead or landing blocked | verified | `tests/stance-vault.test.ts`; screenshots 10b, 10c |
+| Both vaultable walls span the entire depth axis and are served with `isVaultable` over GraphQL | verified | `tests/stance-vault.test.ts`, `tests/api.test.ts` |
+| Arms follow the aim point; muzzle = barrel tip; stance pitch limits; hidden/observe lowered; muzzle never inside a solid | verified | `tests/stance-vault.test.ts`; screenshot 10d |
+
 ### GraphQL and application state
 
 | Item | Result | Evidence |
@@ -264,7 +289,7 @@ post-processing.
 Still open (labelled as proposals in the UI):
 
 - **Depth readability on a perpendicular camera.** Overlap ordering, wall shadows from a front-top key light, depth labels and the selected-depth readout help, but two actors at the same X and different Z still overlap exactly. The prototype shows the ambiguity rather than solving it.
-- **Free vs. lane-limited depth traversal.** Zones plus a default lane are an initial constraint only.
+- **Free vs. lane-limited depth traversal.** v0.2 makes depth binary (lane ↔ far edge of a zone, W/S). Whether a third position or free traversal ever returns is open.
 - **Exact controls and state machine** for move / crouch / peek / aim / depth step (the hold-to-observe, hold-to-aim scheme here is one option).
 - **Attack/defend capture rules** beyond the illustrative progress bar.
 - **Gadget balance** (camera placement, jamming, destruction, counterplay) and further observer sources (drone, sensor, teammate vision).
