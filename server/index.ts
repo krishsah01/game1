@@ -13,7 +13,8 @@ import { createYoga } from 'graphql-yoga';
 import { buildSchema } from './schema.ts';
 import { createStore } from './store.ts';
 
-const PORT = Number(process.env.API_PORT ?? process.env.PORT ?? 4000);
+// API_PORT (not the generic PORT) so an ambient PORT variable cannot move the API onto the web port.
+const PORT = Number(process.env.API_PORT ?? 4000);
 const HOST = process.env.HOST ?? '127.0.0.1';
 
 const store = createStore();

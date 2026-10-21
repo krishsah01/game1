@@ -31,16 +31,20 @@ npm run dev
 | http://127.0.0.1:4000/graphql | local GraphQL Yoga API, with GraphiQL in the browser |
 
 Both services bind to loopback only. The browser always talks to the
-same-origin `/graphql` URL. To run a second checkout beside the first, move
-both ports: `API_PORT=4001 WEB_PORT=5174 npm run dev` (the Vite proxy follows
-`API_PORT`).
+same-origin `/graphql` URL. Ports are strict: if 5173 or 4000 is already in
+use the command fails with a clear message instead of silently moving to
+another port. To run a second checkout beside the first, move both ports:
+`API_PORT=4001 WEB_PORT=5174 npm run dev` (the Vite proxy follows
+`API_PORT`). If the browser shows a 404 for `/`, check that you are running
+`npm run dev` in the folder that contains `index.html` and `package.json`,
+and that the terminal's `Local:` line shows the URL you opened.
 
 Other commands:
 
 | Command | Purpose |
 | --- | --- |
 | `npm run typecheck` | strict TypeScript check of app, server, tests and scripts |
-| `npm test` | 75 focused vitest tests (geometry, cover, visibility, recon, aiming, shots, movement, stance/vault/arm-aim, objective, GraphQL contract, session controller, camera projection) |
+| `npm test` | 82 focused vitest tests (geometry, cover, visibility, recon, aiming, shots, movement, stance/vault/arm-aim, information boundary, objective, GraphQL contract, session controller, camera projection) |
 | `npm run build` | production build into `dist/` |
 | `npm run preview` | serves `dist/` on http://127.0.0.1:4173 **with** the API (`vite preview` proxies `/graphql` to the Yoga server it starts alongside) |
 | `npm run check` | typecheck + tests + build |
@@ -204,7 +208,7 @@ Then `src/shared/scenarios.ts` (the map and presets), `server/resolvers.ts`
 
 ## 7. Acceptance results
 
-Automated evidence is `npm test` (75 tests, all passing at the time of
+Automated evidence is `npm test` (82 tests, all passing at the time of
 writing) and the headless walkthrough `npm run screenshots` (29 frames in
 `docs/screenshots/`, 0 console or page errors). Manual checks were done in
 headless Chromium with SwiftShader WebGL.

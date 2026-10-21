@@ -30,6 +30,8 @@ export function SceneCanvas({ controller, mode, devOptions, onToggleDeveloper, o
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const labelRef = useRef<HTMLDivElement>(null);
   const reticleRef = useRef<HTMLDivElement>(null);
+  const ringRef = useRef<HTMLDivElement>(null);
+  const guideRef = useRef<HTMLDivElement>(null);
   const dotRef = useRef<HTMLDivElement>(null);
   const reticleLabelRef = useRef<HTMLDivElement>(null);
   const pulseLeftRef = useRef<HTMLDivElement>(null);
@@ -93,8 +95,23 @@ export function SceneCanvas({ controller, mode, devOptions, onToggleDeveloper, o
           const ry = input.pointerClient.y - rect.top;
           reticle.style.transform = `translate(${rx.toFixed(1)}px, ${ry.toFixed(1)}px)`;
           reticle.style.opacity = '1';
-          const px = Math.max(-26, Math.min(26, p.aim.depthOffset * view.pixelsPerMeter()));
+          // World-Z offset in pixels at the current zoom; the ring and guide grow with the amplitude so the dot never clips.
+          const ppm = view.pixelsPerMeter();
+          const px = p.aim.depthOffset * ppm;
+          const ampPx = p.aim.amplitude * ppm;
           if (dotRef.current) dotRef.current.style.transform = `translate(${px.toFixed(1)}px, 0)`;
+          const r = Math.max(28, ampPx + 12);
+          if (ringRef.current) {
+            ringRef.current.style.width = `${(2 * r).toFixed(0)}px`;
+            ringRef.current.style.height = `${(2 * r).toFixed(0)}px`;
+            ringRef.current.style.left = `${(-r).toFixed(0)}px`;
+            ringRef.current.style.top = `${(-r).toFixed(0)}px`;
+          }
+          const g = Math.max(24, ampPx);
+          if (guideRef.current) {
+            guideRef.current.style.width = `${(2 * g).toFixed(0)}px`;
+            guideRef.current.style.left = `${(-g).toFixed(0)}px`;
+          }
           if (reticleLabelRef.current) {
             const z = p.aim.selectedDepth;
             reticleLabelRef.current.textContent = `${p.aim.depthWord} · z ${z >= 0 ? '+' : ''}${z.toFixed(2)} · ${p.aim.situation.toLowerCase()}`;
@@ -143,9 +160,9 @@ export function SceneCanvas({ controller, mode, devOptions, onToggleDeveloper, o
         <span />
       </div>
       <div ref={reticleRef} className="reticle" aria-hidden="true">
-        <div className="ring" />
+        <div ref={ringRef} className="ring" />
         <div className="cross" />
-        <div className="guide" />
+        <div ref={guideRef} className="guide" />
         <div ref={dotRef} className="dot" />
         <div ref={reticleLabelRef} className="reticle-label" />
       </div>

@@ -200,7 +200,7 @@ export function Inspector({ controller, state, p, mode, devOptions, onDevOptions
         )}
         {p && (
           <p className="small muted">
-            Observed now: {p.entities.filter((e) => e.observed).map((e) => `${e.label}${dev ? ` (${e.sources.map((s) => (s === 'player' ? 'DIRECT' : s.toUpperCase())).join('+')})` : ''}`).join(', ') || 'nothing dynamic'}
+            Observed now: {p.entities.filter((e) => e.observed).map((e) => `${e.label}${dev ? ` (${e.sources.map((s) => (s === 'player' ? 'DIRECT' : s === p.camera.id ? p.camera.label : s.toUpperCase())).join('+')})` : ''}`).join(', ') || 'nothing dynamic'}
           </p>
         )}
         {dev && p?.dev && (

@@ -88,8 +88,12 @@ function Lab({ choice }: { choice: TransportChoice }) {
     if (helpRef.current) closeHelp();
     else openHelp();
   }, [closeHelp, openHelp]);
+  const pausedByFocusLoss = useRef(false);
   const onFocusLost = useCallback(() => {
-    controller.world?.command({ type: 'pause' });
+    const world = controller.world;
+    if (!world || world.paused) return;
+    world.command({ type: 'pause' });
+    pausedByFocusLoss.current = true;
   }, [controller]);
   const toggleDeveloper = useCallback(() => setMode((m) => (m === 'player' ? 'developer' : 'player')), []);
 
@@ -115,10 +119,12 @@ function Lab({ choice }: { choice: TransportChoice }) {
     selectScenario(s.id);
   };
 
-  // Resume when the canvas regains focus after a focus-loss pause (not while help is open).
+  // Resume only a pause that focus loss caused (never a deliberate P / Pause), and not while help is open.
   useEffect(() => {
     const onFocus = () => {
-      if (!helpRef.current) controller.world?.command({ type: 'resume' });
+      if (!pausedByFocusLoss.current || helpRef.current) return;
+      pausedByFocusLoss.current = false;
+      controller.world?.command({ type: 'resume' });
     };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);

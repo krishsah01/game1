@@ -75,6 +75,12 @@ export class InputController {
     onCanvas('pointerleave', () => {
       this.pointerInside = false;
       this.held.aim = false;
+      if (document.activeElement !== this.canvas) {
+        // Hover-only ownership ends here: drop keys held via hover.
+        this.keys.clear();
+        this.recomputeAxes();
+        this.held.observe = false;
+      }
     });
     onCanvas('pointerdown', (ev) => {
       this.canvas.focus({ preventScroll: true });
@@ -99,11 +105,14 @@ export class InputController {
   }
 
   private onKey(ev: KeyboardEvent, down: boolean): void {
-    if (!this.canvasOwnsInput()) return;
     const key = ev.key.length === 1 ? ev.key.toLowerCase() : ev.key;
     const world = this.getWorld();
     if (!HANDLED.has(key)) return;
-    ev.preventDefault();
+    const owns = this.canvasOwnsInput();
+    // Key presses are honoured only while the canvas owns input; releases are always
+    // processed so a key pressed over the canvas can never stick after focus moves.
+    if (down && !owns) return;
+    if (owns) ev.preventDefault();
     if (ev.repeat) return;
     if (down) this.keys.add(key);
     else this.keys.delete(key);

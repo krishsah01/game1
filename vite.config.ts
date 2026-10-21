@@ -4,7 +4,8 @@ import react from '@vitejs/plugin-react';
 
 // The browser talks to a same-origin /graphql URL. In development and in
 // `vite preview` that path is proxied to the local GraphQL Yoga server
-// (server/index.ts), which binds to loopback only. API_PORT / WEB_PORT let a
+// (server/index.ts), which binds to loopback only. Ports are strict (a busy
+// port fails loudly instead of silently moving); API_PORT / WEB_PORT let a
 // second checkout run beside the default 4000 / 5173 pair.
 const API_PORT = Number(process.env.API_PORT ?? 4000);
 const WEB_PORT = Number(process.env.WEB_PORT ?? 5173);
@@ -20,12 +21,14 @@ export default defineConfig({
   server: {
     host: '127.0.0.1',
     port: WEB_PORT,
-    strictPort: false,
+    // Fail loudly instead of silently moving to another port (the README names this URL).
+    strictPort: true,
     proxy: graphqlProxy,
   },
   preview: {
     host: '127.0.0.1',
     port: 4173,
+    strictPort: true,
     proxy: graphqlProxy,
   },
   build: {
