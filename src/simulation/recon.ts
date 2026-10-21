@@ -18,12 +18,15 @@ export interface CameraState {
   /** Placed from the player's inventory during this run. */
   deployed: boolean;
   destroyed: boolean;
+  /** Rounds left in the device's gun (operator mode, friendly cameras). */
+  gunAmmo: number;
 }
 
 export const createCamera = (seed: ReconCameraSeed, deployed = false): CameraState => ({
   seed: { ...seed, position: { ...seed.position }, lookAt: { ...seed.lookAt }, mountNormal: { ...seed.mountNormal } },
   deployed,
   destroyed: false,
+  gunAmmo: CAMERA.gunMagazine,
 });
 
 export const cameraFacing = (seed: ReconCameraSeed): Vec3 => normalize(sub(seed.lookAt, seed.position));

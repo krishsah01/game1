@@ -59,6 +59,14 @@ export function Help({ onClose }: { onClose: () => void }) {
               <td>Activate / deactivate the camera link. Your cameras feed sight only while the link is LIVE. Any camera, yours or theirs, can be shot and destroyed; the opposition sees your cameras only through its own view cones</td>
             </tr>
             <tr>
+              <td>O</td>
+              <td>Operate a camera: take over the next live friendly camera's feed (press again for the next one, then back to your body). While operating, your body stands idle and cannot move or act; right mouse aims the camera's own gun (6 rounds, same depth-sway aiming, only inside the camera's arc) and left mouse fires it from the lens, so your body is never in the line of fire</td>
+            </tr>
+            <tr>
+              <td>G</td>
+              <td>Reload a camera's gun: walk up to the camera (within arm's reach) and press G. An empty camera gun cannot be reloaded from the feed</td>
+            </tr>
+            <tr>
               <td>B</td>
               <td>Brace on nearby cover (not while moving or sprinting)</td>
             </tr>

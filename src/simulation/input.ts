@@ -36,6 +36,10 @@ export type Command =
   /** LMB: fires the rifle, or places a camera when the camera slot is equipped. */
   | { type: 'fire' }
   | { type: 'equip'; slot: EquipSlot }
+  /** O: take over the next live friendly camera's feed (cycles), or `id: null` to return to the body. */
+  | { type: 'operateCamera'; id?: string | null }
+  /** G: reload the gun of a friendly camera within arm's reach of the body. */
+  | { type: 'serviceCamera' }
   /** Swap the weapon carried in a firearm slot (comes with a full magazine). */
   | { type: 'setLoadout'; slot: FirearmSlot; weapon: WeaponId }
   /** Place a camera at the snap surface nearest `at` (defaults to the pointer). */

@@ -244,6 +244,22 @@ export function Inspector({ controller, state, p, mode, devOptions, onDevOptions
             3 Camera ×{pl?.cameraCharges ?? 0}
           </button>
         </div>
+        <div className="btn-row">
+          <span className="muted small">Operate (O):</span>
+          {p?.cameras
+            .filter((c) => c.team === 'FRIENDLY')
+            .map((c) => (
+              <button key={c.id} className={p.operating?.id === c.id ? 'on' : ''} disabled={c.status !== 'ONLINE'} onClick={() => cmd({ type: 'operateCamera', id: c.id })}>
+                {c.label}
+              </button>
+            ))}
+          <button disabled={!p?.operating} onClick={() => cmd({ type: 'operateCamera', id: null })}>
+            Body
+          </button>
+          <button disabled={!pl?.serviceable} onClick={() => cmd({ type: 'serviceCamera' })} title="G: reload the gun of a camera within reach">
+            Reload cam gun
+          </button>
+        </div>
         {p && (
           <table className="kv">
             <tbody>
@@ -254,6 +270,7 @@ export function Inspector({ controller, state, p, mode, devOptions, onDevOptions
                   </td>
                   <td>
                     {c.statusLabel} · {c.mount}
+                    {c.team === 'FRIENDLY' && ` · gun ${c.gunAmmo}`}
                     {dev && ` · x ${c.position.x.toFixed(1)} y ${c.position.y.toFixed(1)}`}
                     {dev && c.team === 'FRIENDLY' && ` · ${c.spottedBy.length ? `SPOTTED by ${c.spottedBy.join('+')}` : 'unseen by OPFOR'}`}
                   </td>

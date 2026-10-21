@@ -442,7 +442,11 @@ export function makeCameraDevice(tint = 0x33363a): Group {
   const led = new Mesh(new SphereGeometry(0.025, 8, 8), new MeshStandardMaterial({ color: 0x55ffcc, emissive: 0x33ffcc, emissiveIntensity: 2 }));
   led.position.set(0.09, 0.08, 0.06);
   led.name = 'led';
-  head.add(body, lens, led);
+  // Operator gun slung under the body, barrel along the lens axis.
+  const barrel = new Mesh(new CylinderGeometry(0.018, 0.018, 0.26, 8), std(0x15181a, { metalness: 0.5, roughness: 0.4 }));
+  barrel.rotation.z = Math.PI / 2;
+  barrel.position.set(-0.08, -0.09, 0);
+  head.add(body, lens, led, barrel);
   g.add(bracket, head);
   return g;
 }

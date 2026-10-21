@@ -9,6 +9,7 @@
  *   C crouch · Z prone · F (hold) observe / peek · RMB (hold) aim · LMB fire
  *   Tab cycles walk → combat → sprint · Q / E aim depth · B brace
  *   1 primary · 2 sidearm · 3 deployable camera (LMB places it) · U camera link on/off
+ *   O operate the next live camera (feed; body idle) · G reload a camera's gun within reach
  *   V developer view · P pause · . step · R reload · Esc help
  */
 import { emptyHeld, type HeldInput } from '../simulation/input.ts';
@@ -24,7 +25,7 @@ export interface InputCallbacks {
 }
 
 const FORM_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON']);
-const HANDLED = new Set(['a', 'd', 'w', 's', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Tab', 'c', 'z', 'f', 'q', 'e', 'b', 'v', 'r', 'Escape', 'p', '.', 'u', '1', '2', '3']);
+const HANDLED = new Set(['a', 'd', 'w', 's', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Tab', 'c', 'z', 'f', 'q', 'e', 'b', 'v', 'r', 'Escape', 'p', '.', 'u', '1', '2', '3', 'o', 'g']);
 
 export class InputController {
   readonly held: HeldInput = emptyHeld();
@@ -166,6 +167,12 @@ export class InputController {
         break;
       case 'u':
         this.callbacks.onToggleCameraLink();
+        break;
+      case 'o':
+        world.command({ type: 'operateCamera' });
+        break;
+      case 'g':
+        world.command({ type: 'serviceCamera' });
         break;
       case 'p':
         world.command({ type: 'togglePause' });

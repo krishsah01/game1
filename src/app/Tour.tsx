@@ -9,7 +9,7 @@ export const TOUR_HINTS: Record<ScenarioKind, string> = {
   DEPTH_SHOT: 'Aim at the target through the slot. Press Q/E to change selected depth, B to brace, then fire. The tracer shows a hit, a jamb strike or a depth miss. W moves you to the FAR edge of the approach zone: the same target hides behind the far jamb. Walk up to the jamb and hold F to peek around it through the slot.',
   CONTROL_POINT: 'Walk right into CONTROL A to capture. Click “Defender: enter zone”: progress pauses and the public CONTESTED state appears without a defender marker.',
   MARKSMAN: 'Hold the right mouse button with the DMR: the 4× scope pans the view further in the direction you face. Press 2 for the pistol (the DMR stays on your back with its own magazine), 1 to switch back. The inspector Loadout section swaps either slot.',
-  CAMERA_WAR: 'Press 3 to equip a camera, point at the top of the low wall and click: it snaps on (depth 0). Press U to bring the link LIVE and watch OPFOR A through it while you stay hidden. Press 1 and shoot the OPFOR CAM under the ceiling. In developer view (V) the red fans show who has spotted your camera.',
+  CAMERA_WAR: 'Press 3 to equip a camera, point at the top of the low wall and click: it snaps on (depth 0). Press U to bring the link LIVE and watch OPFOR A through it while you stay hidden. Press 1 and shoot the OPFOR CAM under the ceiling. In developer view (V) the red fans show who has spotted your camera. With the link live, press O to operate CAM 02: your body goes idle, hold the right mouse button and fire its gun at OPFOR A from the wall top. When its 6 rounds are gone, press O to come back, step up to the camera and press G.',
 };
 
 interface Props {

@@ -3,6 +3,7 @@
  * camera link and own-camera status records. Deliberately shows no enemy
  * positions, no visibility scores and no event log.
  */
+import { CAMERA } from '../shared/tuning.ts';
 import { WEAPONS } from '../shared/weapons.ts';
 import type { Presentation } from '../simulation/world.ts';
 
@@ -47,6 +48,15 @@ export function Hud({ p }: { p: Presentation }) {
           </span>
         </div>
       </div>
+      {p.operating && (
+        <div className="hud feed-banner" role="status">
+          <span className="rec">● {p.operating.label} FEED</span>
+          <span>
+            GUN {p.operating.gunAmmo}/{p.operating.gunMagazine}
+          </span>
+          <span className="muted">body idle · O next / back</span>
+        </div>
+      )}
       <div className="hud top-center">
         <div className={`objective ${o.status.toLowerCase()}`}>
           <span>{objectiveText}</span>
@@ -68,6 +78,7 @@ export function Hud({ p }: { p: Presentation }) {
               <span className="hud-k">{c.label}</span>
               <span className={`hud-v link ${c.status.toLowerCase()}`}>{c.statusLabel}</span>
               {c.deployed && <span className="hud-k">{c.mount}</span>}
+              <span className="hud-k">GUN {c.gunAmmo}</span>
             </div>
           ))}
         {p.smoke.enabled && (
@@ -90,6 +101,13 @@ export function Hud({ p }: { p: Presentation }) {
           </span>
           <span className={`slot ${pl.equipped === 'CAMERA' ? 'on' : ''} ${pl.cameraCharges === 0 ? 'empty' : ''}`}>3 CAMERA ×{pl.cameraCharges}</span>
         </div>
+        {pl.serviceable && pl.serviceable.gunAmmo < CAMERA.gunMagazine && (
+          <div className="hud-row">
+            <span className="hud-v accent">
+              G · reload {pl.serviceable.label} gun ({pl.serviceable.gunAmmo})
+            </span>
+          </div>
+        )}
         {pl.placement && (
           <div className="hud-row">
             <span className={`hud-v ${pl.placement.ok ? 'accent' : 'amber'}`}>{pl.placement.ok ? `PLACE · ${pl.placement.mount}` : pl.placement.reason}</span>
@@ -121,6 +139,8 @@ export function Hud({ p }: { p: Presentation }) {
         <span>B brace</span>
         <span>1/2/3 primary/sidearm/camera</span>
         <span>U cam link</span>
+        <span>O operate cam</span>
+        <span>G reload cam gun</span>
         <span>Tab speed</span>
         <span>V developer</span>
         <span>Esc help</span>

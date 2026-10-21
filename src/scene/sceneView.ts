@@ -509,7 +509,10 @@ export class SceneView {
     // Camera follow (translation only, clamped to the room).
     // A scope pans the view further in the facing direction while aiming (translation only).
     const lead = FOLLOW_LEAD * this.halfWidth() + p.player.lookAhead;
-    const target = followCenterX(p.player.position.x + p.player.facingX * lead, this.seed.roomMinX, this.seed.roomMaxX, this.halfWidth());
+    // Operating a camera, the view follows the feed: centred a little ahead of the device along its facing.
+    const target = p.operating
+      ? followCenterX(p.operating.position.x + Math.sign(p.operating.facing.x || 1) * FOLLOW_LEAD * this.halfWidth(), this.seed.roomMinX, this.seed.roomMaxX, this.halfWidth())
+      : followCenterX(p.player.position.x + p.player.facingX * lead, this.seed.roomMinX, this.seed.roomMaxX, this.halfWidth());
     this.followX += (target - this.followX) * (1 - Math.exp(-dt / 0.45));
     fitOrthographic(this.camera, this.width / this.height, VIEW_HEIGHT, this.followX, VIEW_CENTER_Y);
 

@@ -123,6 +123,13 @@ presentations of the same simulation.
 - **Scopes look further.** While aiming a scoped weapon the follow camera pans 7 m further in the facing direction (translation only, still clamped to the room); the HUD shows `SCOPE 4×` and the reticle label says `scope 4×`.
 - **Preset 9, Marksman**: DMR + pistol at the far end of station A.
 
+### New in prototype v0.2.6 (Linear 2DS-8)
+
+- **Camera operator mode (`O`).** With the link live, `O` takes over the next live friendly camera's feed (press again for the next camera, then back to your body; the inspector has direct buttons). The view follows the camera, the stage gets a red feed frame, and the player view shows only what that camera sees. The feed drops back to the body as soon as the link goes down or the device is destroyed.
+- **The body is idle while operating.** Movement, stance, vault, depth moves, reload, slot changes, bracing and placing are all refused (`OPERATING CAM 02 · O to return to your body`); the body stands still with the rifle at low ready, still exposed to the opposition.
+- **Camera gun.** Every friendly camera carries a small gun with 6 rounds (`CAMERA.gunMagazine`). It uses the same aiming mechanics (hold right mouse to aim, depth sway from the selected depth, recoil heat) and can only shoot inside the camera's field of view (`OUTSIDE CAM 02 ARC`). Shots leave the lens, so your body is never in the line of fire.
+- **Reload at the camera (`G`).** An empty camera gun cannot be reloaded from the feed. Return to the body, walk up to the camera (within the same 3.0 m arm's reach used for placing) and press `G`; the HUD prompts `G · reload CAM 02 gun` when one is in reach.
+
 Mechanics (all in plain TypeScript under `src/simulation/`, independent of
 React and Three.js):
 
@@ -177,6 +184,8 @@ React and Three.js):
 | B | brace on cover within reach (not while moving or sprinting) |
 | 1 / 2 / 3 | equip the primary / the sidearm / a deployable camera (left mouse then places it on the nearest floor, ceiling or cover) |
 | U | camera link on/off (an `updateConfig` mutation) |
+| O | operate the next live camera's feed (body idle; aim/fire drive the camera gun), again to cycle back to the body |
+| G | reload the gun of a friendly camera within arm's reach |
 | V | developer view |
 | P / . | pause / step one tick |
 | R | reload |
@@ -354,6 +363,15 @@ scenario mid-mutation.
 | Primary and sidearm carried together with separate magazines; slot swap refuses the wrong class | verified | `tests/weapons.test.ts` |
 | Barrel reach moves the mechanical muzzle; sway and recoil differ per weapon | verified | `tests/weapons.test.ts` |
 | Aiming a scoped weapon pans the view ahead in the facing direction; unscoped or unaimed does not | verified | `tests/weapons.test.ts`; manual check in the browser |
+
+### Prototype v0.2.6 (2DS-8)
+
+| Item | Result | Evidence |
+| --- | --- | --- |
+| O switches to a live camera's perspective (cycles, needs the link); the view shows that feed's sightings | verified | `tests/operator.test.ts`; manual check in the browser |
+| Body takes no physical commands and does not move while operating | verified | `tests/operator.test.ts` |
+| Camera gun: limited ammo, same aim rules, arc-limited, fires from the lens, body ammo untouched | verified | `tests/operator.test.ts`; manual check in the browser (HIT, GUN 5/6) |
+| Empty camera gun reloads only at the device (G within reach); feed drops on link loss or destruction | verified | `tests/operator.test.ts` |
 
 ### GraphQL and application state
 

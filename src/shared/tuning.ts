@@ -191,6 +191,13 @@ export const CAMERA = {
   deployRange: 9,
   /** Look pitch per mount, degrees (positive = up). */
   deployPitch: { CEILING: -35, GROUND: 12, WALL: -15, COVER: -6 },
+  /**
+   * v0.2.6 camera gun: rounds per friendly camera. Reloaded only by a body
+   * standing within `placeReach` of the device (G).
+   */
+  gunMagazine: 6,
+  /** Recoil heat per camera-gun shot. */
+  gunHeatPerShot: 0.3,
 } as const;
 
 /** Opposing actors watch with the same rules as the player: eye height = this fraction of collider height. */
