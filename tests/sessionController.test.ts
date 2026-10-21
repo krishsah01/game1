@@ -115,3 +115,21 @@ describe('SessionController', () => {
     expect(c.world!.knowledge.lastKnown).toHaveLength(0);
   });
 });
+
+describe('SessionController: epoch changes mid-mutation', () => {
+  it('clears the mutating flag when a scenario switch abandons an in-flight mutation', async () => {
+    const t = fakeTransport({ UpdateConfig: [250] });
+    const c = new SessionController(new ApiClient(t));
+    await c.selectScenario('depth-shot');
+    const pending = c.updateConfig({ smokeEnabled: true });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(c.getState().mutating).toBe(true);
+    await c.selectScenario('control-point');
+    expect(c.getState().mutating).toBe(false);
+    await pending;
+    await new Promise((r) => setTimeout(r, 50));
+    expect(c.getState().mutating).toBe(false);
+    expect(c.getState().scenario?.id).toBe('control-point');
+    expect(c.world?.config.smokeEnabled).toBe(false); // the abandoned mutation never touched the new world
+  });
+});

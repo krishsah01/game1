@@ -89,7 +89,8 @@ export class SessionController {
     this.abort?.abort();
     const abort = new AbortController();
     this.abort = abort;
-    this.set({ phase: 'loading', epoch, error: null });
+    // A new epoch abandons any in-flight mutation of the old one, so its `mutating` flag must not survive.
+    this.set({ phase: 'loading', epoch, error: null, mutating: false });
     try {
       const [scenario, session] = await Promise.all([this.client.scenario(id, abort.signal), this.client.createSession(id, abort.signal)]);
       if (this.state.epoch !== epoch) return; // stale: a newer selection won

@@ -29,16 +29,17 @@ export async function chooseTransport(forceInProcess = false): Promise<Transport
   if (forceInProcess || wantsInProcess()) {
     return { client: new ApiClient(new InProcessTransport()), probeError: null, autoFallback: false };
   }
-  const http: Transport = new HttpTransport('/graphql', 2500);
-  const client = new ApiClient(http);
+  // Short timeout for the connectivity probe only; real operations get the transport's normal timeout.
+  const probe = new ApiClient(new HttpTransport('/graphql', 2500));
   try {
-    await client.apiInfo();
-    return { client, probeError: null, autoFallback: false };
+    await probe.apiInfo();
+    const http: Transport = new HttpTransport('/graphql');
+    return { client: new ApiClient(http), probeError: null, autoFallback: false };
   } catch (err) {
     const message = (err as Error).message;
     if (!isLocalHost()) {
       return { client: new ApiClient(new InProcessTransport()), probeError: message, autoFallback: true };
     }
-    return { client, probeError: message, autoFallback: false };
+    return { client: probe, probeError: message, autoFallback: false };
   }
 }

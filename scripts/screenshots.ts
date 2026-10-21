@@ -109,8 +109,17 @@ async function main() {
   await page.waitForTimeout(700);
   await shot(page, '03b-camera-online', 'updateConfig(cameraStatus: ONLINE) → revision 2: CAM 01 reveals the enemy and the bag inside its own unblocked view.');
   await setMode(page, true);
-  await shot(page, '03c-camera-online-dev', 'Developer view: camera cone and its clipped sample rays; source tag CAM-01.');
+  await shot(page, '03c-camera-online-dev', 'Developer view: camera cone and its clipped sample rays; source tag CAM 01.');
   await setMode(page, false);
+  // A slider gesture must commit exactly one debounced updateConfig (revision 2 → 3).
+  const slider = page.locator('.inspector input[type=range]').first();
+  await slider.focus();
+  await page.keyboard.press('ArrowRight');
+  await page.waitForFunction(() => Array.from(document.querySelectorAll('.chip')).some((c) => c.textContent?.includes('rev 3')), undefined, { timeout: 5000 });
+  await page.waitForTimeout(600);
+  const rev = await page.evaluate(() => Array.from(document.querySelectorAll('.chip')).map((c) => c.textContent).find((t) => t?.startsWith('rev')));
+  if (rev !== 'rev 3') throw new Error(`slider commit produced ${rev}, expected exactly rev 3`);
+  console.log('  slider commit check: one UpdateConfig → rev 3');
 
   // 4. Lost contact
   await selectScenario(page, 3);
