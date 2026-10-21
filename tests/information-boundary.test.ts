@@ -22,7 +22,9 @@ describe('muzzle anchor stays outside solid geometry', () => {
     const barrier = aabbFromBounds(bounds(-10, 0.55, 0, 1.6, 1.1, 0.6));
     expect(w.player.cover.muzzle.x).toBeLessThan(barrier.min.x);
     expect(observed(w, 'enemy-a')).toBe(true);
-    const r = w.command({ type: 'fire' })!;
+    // Observe keeps the rifle at low ready: it cannot fire, and its firing line ends in the concrete.
+    expect(w.command({ type: 'fire' })).toBeNull();
+    const r = w.command({ type: 'testFiringLine' })!;
     expect(r.hit?.id).toBe('barrier-a');
   });
 
@@ -54,7 +56,7 @@ describe('player presentation never carries hidden shot data', () => {
     ticks(w, 3);
     const enemy = w.actors.find((a) => a.id === 'enemy-b')!;
     expect(observed(w, 'enemy-b')).toBe(false);
-    hold(w, { pointerWorld: { x: enemy.position.x, y: 1.2 } });
+    hold(w, { pointerWorld: { x: enemy.position.x, y: 1.2 }, aim: true });
     w.command({ type: 'setSelectedDepth', depth: enemy.position.z });
     w.step();
     return { w, enemy };

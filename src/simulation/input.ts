@@ -1,5 +1,6 @@
 /** Input contract between the app shell and the simulation. */
 import type { MoveMode, Stance } from '../shared/types.ts';
+import type { WeaponId } from '../shared/weapons.ts';
 
 export interface HeldInput {
   /** -1 left, 0 none, +1 right */
@@ -13,6 +14,10 @@ export interface HeldInput {
 }
 
 export const emptyHeld = (): HeldInput => ({ moveX: 0, observe: false, aim: false, pointerWorld: null });
+
+/** Inventory slots: 1 = primary, 2 = sidearm, 3 = deployable camera. */
+export type EquipSlot = 'PRIMARY' | 'SIDEARM' | 'CAMERA';
+export type FirearmSlot = Exclude<EquipSlot, 'CAMERA'>;
 
 export type CoverIntent = 'hidden' | 'observe' | 'aimOver' | null;
 
@@ -28,7 +33,17 @@ export type Command =
   | { type: 'setStance'; stance: Stance }
   | { type: 'setMoveMode'; mode: MoveMode }
   | { type: 'cycleMoveMode' }
+  /** LMB: fires the rifle, or places a camera when the camera slot is equipped. */
   | { type: 'fire' }
+  | { type: 'equip'; slot: EquipSlot }
+  /** O: take over the next live friendly camera's feed (cycles), or `id: null` to return to the body. */
+  | { type: 'operateCamera'; id?: string | null }
+  /** G: reload the gun of a friendly camera within arm's reach of the body. */
+  | { type: 'serviceCamera' }
+  /** Swap the weapon carried in a firearm slot (comes with a full magazine). */
+  | { type: 'setLoadout'; slot: FirearmSlot; weapon: WeaponId }
+  /** Place a camera at the snap surface nearest `at` (defaults to the pointer). */
+  | { type: 'deployCamera'; at?: { x: number; y: number } }
   | { type: 'testFiringLine' }
   | { type: 'reload' }
   /** Depth move (W = FAR, S = LANE). Only honoured inside a depth zone. */
@@ -37,6 +52,8 @@ export type Command =
   | { type: 'vault' }
   | { type: 'stepDepth'; direction: -1 | 1 }
   | { type: 'setSelectedDepth'; depth: number }
+  /** Inspector latch: keep the aim button held without a mouse (fire needs aiming). */
+  | { type: 'setAimLatch'; on: boolean }
   | { type: 'toggleBrace' }
   | { type: 'setBrace'; on: boolean }
   /** Latched UI buttons for inspecting cover states without holding keys. */

@@ -20,12 +20,20 @@ export const typeDefs = /* GraphQL */ `
     SMOKE_SOUND
     DEPTH_SHOT
     CONTROL_POINT
+    CAMERA_WAR
+    MARKSMAN
   }
 
   enum EntityKind { PLAYER ENEMY DROPPED_GEAR CAMERA }
   enum Team { FRIENDLY OPPOSING NEUTRAL }
   enum ScriptKind { STATIC PATROL LOST_CONTACT_ROUTE OBJECTIVE_CONTEST }
   enum CameraStatus { ONLINE OFFLINE JAMMED DESTROYED }
+  "What a camera is fixed to. Cameras always sit on the lane plane (z = 0)."
+  enum CameraMount { WALL CEILING GROUND COVER }
+  enum WeaponId { CARBINE DMR SMG PISTOL MACHINE_PISTOL }
+
+  "Primary and sidearm carried at the same time."
+  type Loadout { primary: WeaponId!, sidearm: WeaponId! }
   enum Stance { STANDING CROUCHED PRONE }
   enum MoveMode { WALK COMBAT SPRINT }
 
@@ -64,6 +72,12 @@ export const typeDefs = /* GraphQL */ `
   type ReconCameraSeed {
     id: ID!
     label: String!
+    "FRIENDLY cameras feed the player; OPPOSING cameras feed the opposition."
+    team: Team!
+    mount: CameraMount!
+    "Outward normal of the surface the device is fixed to."
+    mountNormal: Vec3!
+    "Always z = 0."
     position: Vec3!
     lookAt: Vec3!
     fovDegrees: Float!
@@ -79,7 +93,11 @@ export const typeDefs = /* GraphQL */ `
     depthZones: [DepthZone!]!
     smokeBounds: Bounds!
     captureBounds: Bounds!
-    recon: ReconCameraSeed!
+    "Preplaced cameras of both teams."
+    cameras: [ReconCameraSeed!]!
+    "Deployable cameras in the player's inventory at the start."
+    deployableCameras: Int!
+    loadout: Loadout!
     roomMinX: Float!
     roomMaxX: Float!
     stationLabels: [StationLabel!]!
@@ -89,6 +107,7 @@ export const typeDefs = /* GraphQL */ `
     visionRange: Float!
     visionFovDegrees: Float!
     lastKnownSeconds: Float!
+    "Link status of the friendly camera network (U toggles ONLINE/OFFLINE in the lab)."
     cameraStatus: CameraStatus!
     smokeEnabled: Boolean!
     baseSwayAmplitude: Float!

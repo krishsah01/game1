@@ -170,6 +170,37 @@ export class SessionController {
     return run;
   }
 
+  /**
+   * U key: toggles the friendly camera link ONLINE ⇄ OFFLINE through the same
+   * updateConfig mutation the inspector uses. A jammed or destroyed link cannot
+   * be activated from the field. If the API is unreachable the change is applied
+   * locally so the key still works (the session catches up on the next mutation).
+   */
+  async toggleCameraLink(): Promise<DemoSession | null> {
+    const world = this.world;
+    if (!world) return null;
+    const current = world.config.cameraStatus;
+    if (current === 'JAMMED' || current === 'DESTROYED') {
+      world.notify(`CAMERA LINK ${current} · cannot activate`);
+      return null;
+    }
+    const next = current === 'ONLINE' ? 'OFFLINE' : 'ONLINE';
+    if (next === 'ONLINE' && !world.cameras.some((c) => c.seed.team === 'FRIENDLY' && !c.destroyed)) {
+      world.notify('NO CAMERAS TO LINK');
+      return null;
+    }
+    if (!this.state.session) {
+      world.applyConfig({ ...world.config, cameraStatus: next });
+      return null;
+    }
+    try {
+      return await this.updateConfig({ cameraStatus: next });
+    } catch {
+      if (this.world === world) world.applyConfig({ ...world.config, cameraStatus: next });
+      return null;
+    }
+  }
+
   /** Local-only reset used when the API is unreachable: rebuilds from the cached seed and last known config. */
   resetLocally(): void {
     if (!this.world) return;

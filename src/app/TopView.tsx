@@ -68,23 +68,26 @@ export function TopView({ controller }: { controller: SessionController }) {
         const b = aabbFromBounds(scene.smokeBounds);
         rect(b.min.x, b.min.z, b.max.x - b.min.x, b.max.z - b.min.z, 'rgba(220,220,215,0.25)');
       }
-      // Camera + cone.
-      const cam = p.camera;
-      ctx.strokeStyle = cam.status === 'ONLINE' ? 'rgba(127,231,216,0.9)' : 'rgba(255,90,90,0.6)';
-      ctx.beginPath();
-      ctx.arc(X(cam.position.x), Z(cam.position.z), 4, 0, Math.PI * 2);
-      ctx.stroke();
-      if (cam.status === 'ONLINE') {
-        const yaw = Math.atan2(cam.facing.z, cam.facing.x);
-        const half = (cam.fovDegrees * Math.PI) / 360;
-        const r = cam.range * 0.6;
+      // Cameras (both teams in developer view) + cones.
+      for (const cam of p.cameras) {
+        const friendly = cam.team === 'FRIENDLY';
+        ctx.strokeStyle = cam.status === 'ONLINE' ? (friendly ? 'rgba(127,231,216,0.9)' : 'rgba(255,106,90,0.9)') : 'rgba(255,90,90,0.45)';
         ctx.beginPath();
-        ctx.moveTo(X(cam.position.x), Z(cam.position.z));
-        ctx.lineTo(X(cam.position.x + Math.cos(yaw - half) * r), Z(cam.position.z + Math.sin(yaw - half) * r));
-        ctx.lineTo(X(cam.position.x + Math.cos(yaw + half) * r), Z(cam.position.z + Math.sin(yaw + half) * r));
-        ctx.closePath();
-        ctx.fillStyle = 'rgba(127,231,216,0.08)';
-        ctx.fill();
+        ctx.arc(X(cam.position.x), Z(cam.position.z), 4, 0, Math.PI * 2);
+        ctx.stroke();
+        if (cam.status === 'ONLINE') {
+          // Cameras sit on z = 0 and look in the X/Y plane, so the top view shows the cone's depth spread.
+          const yaw = Math.atan2(cam.facing.z, cam.facing.x);
+          const half = (cam.fovDegrees * Math.PI) / 360;
+          const r = cam.range * 0.6;
+          ctx.beginPath();
+          ctx.moveTo(X(cam.position.x), Z(cam.position.z));
+          ctx.lineTo(X(cam.position.x + Math.cos(yaw - half) * r), Z(cam.position.z + Math.sin(yaw - half) * r));
+          ctx.lineTo(X(cam.position.x + Math.cos(yaw + half) * r), Z(cam.position.z + Math.sin(yaw + half) * r));
+          ctx.closePath();
+          ctx.fillStyle = friendly ? 'rgba(127,231,216,0.08)' : 'rgba(255,106,90,0.08)';
+          ctx.fill();
+        }
       }
       // Sight rays (player) and firing line.
       const eye = p.player.cover.eye;

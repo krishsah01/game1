@@ -6,6 +6,7 @@
 import { useCallback, useState } from 'react';
 import type { ApiClient } from '../graphql/client.ts';
 import { SELECTED_DEPTH_MAX, SELECTED_DEPTH_MIN } from '../shared/tuning.ts';
+import { PRIMARIES, SIDEARMS, WEAPONS } from '../shared/weapons.ts';
 import type { CameraStatus, DemoConfig, MoveMode } from '../shared/types.ts';
 import type { Command } from '../simulation/input.ts';
 import type { Presentation } from '../simulation/world.ts';
@@ -142,7 +143,12 @@ export function Inspector({ controller, state, p, mode, devOptions, onDevOptions
         </div>
         <div className="btn-row">
           <button onClick={() => cmd({ type: 'testFiringLine' })}>Test firing line</button>
-          <button onClick={() => cmd({ type: 'fire' })}>Fire</button>
+          <button className={pl?.aimLatched ? 'on' : ''} onClick={() => cmd({ type: 'setAimLatch', on: !pl?.aimLatched })} title="Same as holding the right mouse button">
+            Hold aim {pl?.aimLatched ? 'ON' : 'OFF'}
+          </button>
+          <button onClick={() => cmd({ type: 'fire' })} title="Fires only while aiming (right mouse or Hold aim)">
+            Fire
+          </button>
           <button onClick={() => cmd({ type: 'reload' })}>Reload</button>
         </div>
         {pl && (
@@ -200,7 +206,7 @@ export function Inspector({ controller, state, p, mode, devOptions, onDevOptions
         )}
         {p && (
           <p className="small muted">
-            Observed now: {p.entities.filter((e) => e.observed).map((e) => `${e.label}${dev ? ` (${e.sources.map((s) => (s === 'player' ? 'DIRECT' : s === p.camera.id ? p.camera.label : s.toUpperCase())).join('+')})` : ''}`).join(', ') || 'nothing dynamic'}
+            Observed now: {p.entities.filter((e) => e.observed).map((e) => `${e.label}${dev ? ` (${e.sources.map((s) => (s === 'player' ? 'DIRECT' : (p.cameras.find((c) => c.id === s)?.label ?? s.toUpperCase()))).join('+')})` : ''}`).join(', ') || 'nothing dynamic'}
           </p>
         )}
         {dev && p?.dev && (
@@ -217,15 +223,104 @@ export function Inspector({ controller, state, p, mode, devOptions, onDevOptions
         )}
       </Section>
 
-      <Section title="Camera (CAM 01)">
+      <Section title="Cameras">
         <div className="btn-row">
+          <span className="muted small">Friendly link (U):</span>
           {(['ONLINE', 'JAMMED', 'DESTROYED', 'OFFLINE'] as CameraStatus[]).map((s) => (
             <button key={s} className={cfg?.cameraStatus === s ? 'on' : ''} disabled={!cfg} onClick={() => patch({ cameraStatus: s })}>
               {s}
             </button>
           ))}
         </div>
-        <p className="small muted">Link status is player-owned UI. The device mesh is drawn only when it is actually observed.</p>
+        <div className="btn-row">
+          <span className="muted small">Inventory:</span>
+          <button className={pl?.equipped === 'PRIMARY' ? 'on' : ''} onClick={() => cmd({ type: 'equip', slot: 'PRIMARY' })}>
+            1 Primary
+          </button>
+          <button className={pl?.equipped === 'SIDEARM' ? 'on' : ''} onClick={() => cmd({ type: 'equip', slot: 'SIDEARM' })}>
+            2 Sidearm
+          </button>
+          <button className={pl?.equipped === 'CAMERA' ? 'on' : ''} disabled={!pl || pl.cameraCharges === 0} onClick={() => cmd({ type: 'equip', slot: 'CAMERA' })}>
+            3 Camera ×{pl?.cameraCharges ?? 0}
+          </button>
+        </div>
+        <div className="btn-row">
+          <span className="muted small">Operate (O):</span>
+          {p?.cameras
+            .filter((c) => c.team === 'FRIENDLY')
+            .map((c) => (
+              <button key={c.id} className={p.operating?.id === c.id ? 'on' : ''} disabled={c.status !== 'ONLINE'} onClick={() => cmd({ type: 'operateCamera', id: c.id })}>
+                {c.label}
+              </button>
+            ))}
+          <button disabled={!p?.operating} onClick={() => cmd({ type: 'operateCamera', id: null })}>
+            Body
+          </button>
+          <button disabled={!pl?.serviceable} onClick={() => cmd({ type: 'serviceCamera' })} title="G: reload the gun of a camera within reach">
+            Reload cam gun
+          </button>
+        </div>
+        {p && (
+          <table className="kv">
+            <tbody>
+              {p.cameras.map((c) => (
+                <tr key={c.id}>
+                  <td>
+                    {c.label} {c.team === 'OPPOSING' ? '(OPFOR)' : c.deployed ? '(deployed)' : ''}
+                  </td>
+                  <td>
+                    {c.statusLabel} · {c.mount}
+                    {c.team === 'FRIENDLY' && ` · gun ${c.gunAmmo}`}
+                    {dev && ` · x ${c.position.x.toFixed(1)} y ${c.position.y.toFixed(1)}`}
+                    {dev && c.team === 'FRIENDLY' && ` · ${c.spottedBy.length ? `SPOTTED by ${c.spottedBy.join('+')}` : 'unseen by OPFOR'}`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <p className="small muted">
+          Link status is player-owned UI. Every device, yours or theirs, is drawn only while it is actually observed, sits at depth 0 and can be shot. The opposition learns of your cameras only through its own view cones (developer view shows who has spotted them).
+        </p>
+      </Section>
+
+      <Section title="Loadout">
+        <div className="btn-row">
+          <span className="muted small">Primary:</span>
+          {PRIMARIES.map((id) => (
+            <button key={id} className={pl?.loadout.primary === id ? 'on' : ''} onClick={() => cmd({ type: 'setLoadout', slot: 'PRIMARY', weapon: id })}>
+              {WEAPONS[id].label}
+            </button>
+          ))}
+        </div>
+        <div className="btn-row">
+          <span className="muted small">Sidearm:</span>
+          {SIDEARMS.map((id) => (
+            <button key={id} className={pl?.loadout.sidearm === id ? 'on' : ''} onClick={() => cmd({ type: 'setLoadout', slot: 'SIDEARM', weapon: id })}>
+              {WEAPONS[id].label}
+            </button>
+          ))}
+        </div>
+        {pl && (
+          <table className="kv">
+            <tbody>
+              {[pl.loadout.primary, pl.loadout.sidearm].map((id) => {
+                const w = WEAPONS[id];
+                return (
+                  <tr key={id}>
+                    <td>{w.label}</td>
+                    <td>
+                      mag {w.magazine} · reach {w.reach >= 0 ? '+' : ''}
+                      {w.reach.toFixed(2)} m · sway ×{w.sway} · recoil {w.heatPerShot}
+                      {w.scope ? ` · scope ${w.scope.magnification}× (look-ahead ${w.scope.lookAhead} m)` : ''}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+        <p className="small muted">Primary and sidearm are carried together (1 / 2), each with its own magazine. Swapping a weapon here issues a fresh magazine.</p>
       </Section>
 
       <Section title="Smoke and noise">

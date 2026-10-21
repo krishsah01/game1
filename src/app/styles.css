@@ -285,6 +285,18 @@ code {
   color: var(--amber);
   border-color: rgba(255, 180, 84, 0.6);
 }
+.wlabel.placement {
+  font-size: 9px;
+  padding: 1px 4px;
+  border: 1px solid currentColor;
+  background: rgba(16, 19, 22, 0.7);
+}
+.wlabel.placement.ok {
+  color: var(--cyan);
+}
+.wlabel.placement.refused {
+  color: var(--red);
+}
 .wlabel.terminal {
   color: #9fc7ff;
   border: 1px solid rgba(95, 170, 255, 0.5);
@@ -429,6 +441,29 @@ code {
   color: var(--muted);
   margin-left: 4px;
 }
+.inventory {
+  gap: 4px 6px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  max-width: 360px;
+  margin-left: auto;
+  font-size: 10px;
+}
+.inventory .slot {
+  padding: 1px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--muted);
+}
+.inventory .slot.on {
+  border-color: var(--cyan);
+  color: var(--text);
+}
+.inventory .slot.empty {
+  opacity: 0.45;
+}
+.wlabel.camtag.opposing {
+  color: #ff9a8a;
+}
 .legend {
   display: flex;
   flex-wrap: wrap;
@@ -528,6 +563,46 @@ code {
   border-radius: 50%;
   background: var(--cyan);
   box-shadow: 0 0 8px var(--cyan);
+}
+/* Operator mode (v0.2.6): camera feed framing. */
+.stage.feed::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 2px rgba(255, 90, 90, 0.55), inset 0 0 90px rgba(0, 0, 0, 0.65);
+  background: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px);
+}
+.stage.feed .scene-canvas {
+  filter: saturate(0.35) contrast(1.1);
+}
+.hud.feed-banner {
+  top: 74px;
+  white-space: nowrap;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  padding: 3px 10px;
+  border: 1px solid rgba(255, 90, 90, 0.6);
+  background: rgba(16, 19, 22, 0.75);
+  font-family: var(--mono);
+  font-size: 11px;
+  z-index: 3;
+}
+.hud.feed-banner .rec {
+  color: var(--red);
+}
+/* Low ready: the rifle is not pointed; dashed ring, no depth dot. */
+.reticle.low-ready .ring {
+  border-style: dashed;
+}
+.reticle.low-ready .dot,
+.reticle.low-ready .guide {
+  display: none;
+}
+.reticle.low-ready .reticle-label {
+  color: var(--muted);
 }
 .reticle-label {
   position: absolute;

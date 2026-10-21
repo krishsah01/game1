@@ -27,6 +27,7 @@ import type {
   SceneSeed,
 } from './types.ts';
 import { bounds, vec3 } from './types.ts';
+import { DEFAULT_LOADOUT, type Loadout } from './weapons.ts';
 
 export const MAP_ID = 'training-room-v1';
 
@@ -147,16 +148,39 @@ const depthZones: DepthZone[] = [
 const smokeBounds: Bounds = bounds(5.6, 1.6, -0.7, 4.0, 3.2, 4.6); // x 3.6..7.6
 const captureBounds: Bounds = bounds(16.9, 1.0, -0.7, 4.2, 2.0, 4.6); // x 14.8..19.0
 
-const recon: ReconCameraSeed = {
+/** Ceiling underside (the ceiling slab spans y 5.0 .. 5.3). */
+export const CEILING_Y = ROOM_HEIGHT;
+
+/**
+ * Friendly preplaced camera. Fixed to the station-B face of the station-C
+ * lintel, on the lane plane (z = 0), looking back over the far room.
+ */
+const cam01: ReconCameraSeed = {
   id: 'cam-01',
   label: 'CAM 01',
-  position: vec3(9.5, 3.3, -2.75),
+  team: 'FRIENDLY',
+  mount: 'WALL',
+  mountNormal: vec3(-1, 0, 0),
+  position: vec3(9.66, 3.3, 0),
   lookAt: vec3(5.0, 0.9, 0.0),
   fovDegrees: 70,
   range: 11,
 };
 
-export function buildScene(entities: EntitySeed[]): SceneSeed {
+/** Opposing camera under the ceiling between stations A and B, watching the station-A approach. */
+const opforCeilingCam = (): ReconCameraSeed => ({
+  id: 'cam-op1',
+  label: 'OPFOR CAM',
+  team: 'OPPOSING',
+  mount: 'CEILING',
+  mountNormal: vec3(0, -1, 0),
+  position: vec3(-7.4, CEILING_Y - 0.14, 0),
+  lookAt: vec3(-12.0, 0.6, 0),
+  fovDegrees: 70,
+  range: 11,
+});
+
+export function buildScene(entities: EntitySeed[], extra: { cameras?: ReconCameraSeed[]; deployableCameras?: number; loadout?: Loadout } = {}): SceneSeed {
   return {
     mapId: MAP_ID,
     colliders: buildColliders(),
@@ -164,7 +188,9 @@ export function buildScene(entities: EntitySeed[]): SceneSeed {
     depthZones,
     smokeBounds,
     captureBounds,
-    recon,
+    cameras: [cam01, ...(extra.cameras ?? [])],
+    deployableCameras: extra.deployableCameras ?? 2,
+    loadout: { ...(extra.loadout ?? DEFAULT_LOADOUT) },
     roomMinX: ROOM_MIN_X,
     roomMaxX: ROOM_MAX_X,
     stationLabels: [
@@ -374,6 +400,26 @@ export const SCENARIOS: Scenario[] = [
     seed: 107,
     initialScene: buildScene([player(13.0, 1, 'STANDING'), defenderD()]),
     defaultConfig: withConfig({ cameraStatus: 'OFFLINE', captureSeconds: 10 }),
+  },
+  {
+    id: 'camera-war',
+    kind: 'CAMERA_WAR',
+    title: '8. Camera war',
+    description:
+      'Two deployable cameras in your inventory and an OPFOR camera on the ceiling. Deploy one onto the wall (3, then click), link it with U, and shoot the enemy camera. Every camera is a dynamic object: the opposition only learns of yours through its own view cones.',
+    seed: 108,
+    initialScene: buildScene([player(-12.6, 1, 'STANDING'), enemyA()], { cameras: [opforCeilingCam()], deployableCameras: 2 }),
+    defaultConfig: withConfig({ cameraStatus: 'OFFLINE' }),
+  },
+  {
+    id: 'marksman',
+    kind: 'MARKSMAN',
+    title: '9. Marksman',
+    description:
+      'A DMR with a 4× scope as the primary and a pistol as the sidearm, carried together. Hold aim with the DMR: the scope pans your view further ahead. Press 2 for the pistol, 1 for the DMR again; each keeps its own magazine.',
+    seed: 109,
+    initialScene: buildScene([player(-18.0, 1, 'STANDING'), enemyA()], { loadout: { primary: 'DMR', sidearm: 'PISTOL' } }),
+    defaultConfig: withConfig({ cameraStatus: 'OFFLINE' }),
   },
 ];
 

@@ -10,7 +10,7 @@ import { hold, makeWorld, ticks } from './helpers.ts';
 describe('3D shot resolution at the aperture', () => {
   const aimAtTarget = (depth: number) => {
     const w = makeWorld('depth-shot', { baseSwayAmplitude: 0 });
-    hold(w, { pointerWorld: { x: 13.6, y: 1.2 } });
+    hold(w, { pointerWorld: { x: 13.6, y: 1.2 }, aim: true });
     w.command({ type: 'setSelectedDepth', depth });
     ticks(w, 3);
     return w;
@@ -57,8 +57,9 @@ describe('3D shot resolution at the aperture', () => {
   });
 
   it('sway sampled at the shot moment sets the depth offset; it is recorded', () => {
-    const w = makeWorld('depth-shot', { baseSwayAmplitude: 1.2, swayFrequencyHz: 0.25 });
-    hold(w, { pointerWorld: { x: 13.6, y: 1.2 } });
+    // Aiming halves the sway (SWAY.aimFactor), so the base is doubled to keep the aimed amplitude at 1.2 m.
+    const w = makeWorld('depth-shot', { baseSwayAmplitude: 2.4, swayFrequencyHz: 0.25 });
+    hold(w, { pointerWorld: { x: 13.6, y: 1.2 }, aim: true });
     ticks(w, 60); // quarter cycle: sin near 1 → offset near amplitude
     const r = w.command({ type: 'fire' })!;
     expect(w.aim.lastSampledOffset).not.toBeNull();
@@ -72,7 +73,7 @@ describe('3D shot resolution at the aperture', () => {
     const w = makeWorld('exposure-ladder', { baseSwayAmplitude: 0 });
     hold(w, { observe: true, pointerWorld: { x: -6.2, y: 1.2 } });
     ticks(w, 5);
-    const r = w.command({ type: 'fire' })!;
+    const r = w.command({ type: 'testFiringLine' })!;
     expect(r.hit?.id).toBe('barrier-a');
     expect(r.hit!.t).toBeLessThan(1);
   });

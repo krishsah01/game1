@@ -31,7 +31,7 @@ describe('SessionController', () => {
   it('loads a scenario, creates a session and builds a world', async () => {
     const c = new SessionController(new ApiClient(fakeTransport()));
     await c.loadCatalogue();
-    expect(c.getState().scenarios).toHaveLength(7);
+    expect(c.getState().scenarios).toHaveLength(9);
     await c.selectScenario('depth-shot');
     const s = c.getState();
     expect(s.phase).toBe('ready');

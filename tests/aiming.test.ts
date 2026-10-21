@@ -10,7 +10,10 @@ describe('depth sway', () => {
     seconds(b, 2);
     expect(a.aim.swayPhase).toBeCloseTo(b.aim.swayPhase, 10);
     expect(currentDepthOffset(a.aim)).toBeCloseTo(currentDepthOffset(b.aim), 10);
-    hold(a, { pointerWorld: { x: 13.6, y: 1.2 } });
+    hold(a, { pointerWorld: { x: 13.6, y: 1.2 }, aim: true });
+    hold(b, { pointerWorld: { x: 13.6, y: 1.2 }, aim: true });
+    a.step();
+    b.step();
     a.command({ type: 'fire' });
     a.command({ type: 'fire' });
     expect(a.aim.swayPhase).toBeCloseTo(b.aim.swayPhase, 10);
@@ -66,7 +69,8 @@ describe('depth sway', () => {
 
     const recoil = makeWorld('depth-shot');
     seconds(recoil, 3);
-    hold(recoil, { pointerWorld: { x: 13.6, y: 1.2 } });
+    hold(recoil, { pointerWorld: { x: 13.6, y: 1.2 }, aim: true });
+    recoil.step();
     for (let i = 0; i < 5; i++) recoil.command({ type: 'fire' });
     ticks(recoil, 6);
     expect(recoil.aim.swayAmplitude).toBeGreaterThan(stillAmp);

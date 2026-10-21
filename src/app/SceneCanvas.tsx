@@ -57,6 +57,7 @@ export function SceneCanvas({ controller, mode, devOptions, onToggleDeveloper, o
         onToggleDeveloper: () => callbacksRef.current.onToggleDeveloper(),
         onEscape: () => callbacksRef.current.onEscape(),
         onFire: () => controller.world?.command({ type: 'fire' }),
+        onToggleCameraLink: () => void controller.toggleCameraLink(),
       },
     );
     input.attach();
@@ -85,6 +86,7 @@ export function SceneCanvas({ controller, mode, devOptions, onToggleDeveloper, o
       world.advance(dt);
       const p = world.snapshot(modeRef.current);
       view.frame(p, dt, { mode: modeRef.current, ...devRef.current });
+      canvas.parentElement?.classList.toggle('feed', p.operating !== null);
 
       // Reticle follows the pointer; the dot encodes the current depth offset (world Z → pixels).
       const reticle = reticleRef.current;
@@ -94,7 +96,10 @@ export function SceneCanvas({ controller, mode, devOptions, onToggleDeveloper, o
           const rx = input.pointerClient.x - rect.left;
           const ry = input.pointerClient.y - rect.top;
           reticle.style.transform = `translate(${rx.toFixed(1)}px, ${ry.toFixed(1)}px)`;
-          reticle.style.opacity = '1';
+          // Low ready: the rifle is not pointed at the reticle and cannot fire.
+          const lowReady = p.operating ? !p.operating.aiming : !p.player.cover.aiming && p.player.equipped !== 'CAMERA';
+          reticle.style.opacity = lowReady ? '0.45' : '1';
+          reticle.classList.toggle('low-ready', lowReady);
           // World-Z offset in pixels at the current zoom; the ring and guide grow with the amplitude so the dot never clips.
           const ppm = view.pixelsPerMeter();
           const px = p.aim.depthOffset * ppm;
@@ -114,7 +119,11 @@ export function SceneCanvas({ controller, mode, devOptions, onToggleDeveloper, o
           }
           if (reticleLabelRef.current) {
             const z = p.aim.selectedDepth;
-            reticleLabelRef.current.textContent = `${p.aim.depthWord} · z ${z >= 0 ? '+' : ''}${z.toFixed(2)} · ${p.aim.situation.toLowerCase()}`;
+            reticleLabelRef.current.textContent = lowReady
+              ? p.operating
+                ? `${p.operating.label} gun · hold RMB to aim`
+                : 'low ready · hold RMB to aim'
+              : `${p.player.scoped ? `scope ${p.player.weapon.scope?.magnification}× · ` : ''}${p.aim.depthWord} · z ${z >= 0 ? '+' : ''}${z.toFixed(2)} · ${p.aim.situation.toLowerCase()}`;
           }
         } else reticle.style.opacity = '0';
       }

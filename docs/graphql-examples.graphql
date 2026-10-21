@@ -38,7 +38,8 @@ query Scenario($id: ID!) {
       }
       entities { id kind team position { x y z } facingX stance script waypoints { x y z } holdSeconds }
       depthZones { id label bounds { center { x y z } size { x y z } } }
-      recon { id position { x y z } lookAt { x y z } fovDegrees range }
+      cameras { id label team mount position { x y z } lookAt { x y z } fovDegrees range }
+      deployableCameras
     }
   }
 }

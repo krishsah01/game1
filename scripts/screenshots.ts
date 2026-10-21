@@ -168,6 +168,8 @@ async function main() {
     await page.waitForTimeout(150);
   };
   await aimAtTarget();
+  // v0.2.3: firing needs aiming; the inspector latch stands in for holding the right mouse button.
+  await inspectorButton(page, 'Hold aim OFF');
   await inspectorButton(page, 'FAR');
   await aimAtTarget();
   await page.waitForTimeout(200);

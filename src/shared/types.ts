@@ -13,6 +13,8 @@
  * Units: metres, seconds, degrees (FOV), cycles/second (sway frequency).
  */
 
+import type { Loadout } from './weapons.ts';
+
 export interface Vec3 {
   x: number;
   y: number;
@@ -32,7 +34,9 @@ export type ScenarioKind =
   | 'LOST_CONTACT'
   | 'SMOKE_SOUND'
   | 'DEPTH_SHOT'
-  | 'CONTROL_POINT';
+  | 'CONTROL_POINT'
+  | 'CAMERA_WAR'
+  | 'MARKSMAN';
 
 export type EntityKind = 'PLAYER' | 'ENEMY' | 'DROPPED_GEAR' | 'CAMERA';
 export type Team = 'FRIENDLY' | 'OPPOSING' | 'NEUTRAL';
@@ -86,9 +90,18 @@ export interface DepthZone {
   bounds: Bounds;
 }
 
+/** What a recon camera is fixed to. Cameras always sit on the lane plane (z = 0). */
+export type CameraMount = 'WALL' | 'CEILING' | 'GROUND' | 'COVER';
+
 export interface ReconCameraSeed {
   id: string;
   label: string;
+  /** FRIENDLY cameras feed the player; OPPOSING cameras feed the opposition. */
+  team: Team;
+  mount: CameraMount;
+  /** Outward normal of the surface the device is fixed to (unit, in the X/Y plane). */
+  mountNormal: Vec3;
+  /** Device position. z is always 0 (the lane plane), so a camera can be shot at depth 0. */
   position: Vec3;
   lookAt: Vec3;
   fovDegrees: number;
@@ -102,7 +115,12 @@ export interface SceneSeed {
   depthZones: DepthZone[];
   smokeBounds: Bounds;
   captureBounds: Bounds;
-  recon: ReconCameraSeed;
+  /** Preplaced cameras of both teams. Deployed cameras are runtime state. */
+  cameras: ReconCameraSeed[];
+  /** Deployable cameras in the player's inventory at the start of the preset. */
+  deployableCameras: number;
+  /** Primary and sidearm the player starts with (both carried at once). */
+  loadout: Loadout;
   /** Horizontal extent of the room, used by the follow camera. */
   roomMinX: number;
   roomMaxX: number;
@@ -114,6 +132,7 @@ export interface DemoConfig {
   visionRange: number;
   visionFovDegrees: number;
   lastKnownSeconds: number;
+  /** Link status of the FRIENDLY camera network (U toggles ONLINE/OFFLINE). Destroyed devices stay destroyed. */
   cameraStatus: CameraStatus;
   smokeEnabled: boolean;
   baseSwayAmplitude: number;

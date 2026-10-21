@@ -39,7 +39,9 @@ export const SCENARIO = /* GraphQL */ `
         depthZones { id label bounds ${BOUNDS} }
         smokeBounds ${BOUNDS}
         captureBounds ${BOUNDS}
-        recon { id label position ${VEC3} lookAt ${VEC3} fovDegrees range }
+        cameras { id label team mount mountNormal ${VEC3} position ${VEC3} lookAt ${VEC3} fovDegrees range }
+        deployableCameras
+        loadout { primary sidearm }
         stationLabels { id label x }
       }
     }

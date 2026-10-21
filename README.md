@@ -78,7 +78,7 @@ drive gameplay (`src/shared/scenarios.ts`):
 | C / Depth (x 10…14.8) | partition with a 0.7 m slot (real 3D jambs), target at selectable depth | depth movement, muzzle obstruction, bracing, shot-depth sampling |
 | CONTROL A (x 14.8…19) | capture terminal, zone, tall crate stack the defender can hide behind | illustrative capture and CONTESTED |
 
-Seven guided presets reposition the player, actors and configuration on that
+Nine guided presets reposition the player, actors and configuration on that
 shared map; each is a real GraphQL session. A guided-tour button walks through
 them with captions. Player view and Developer view (`V`) are separate
 presentations of the same simulation.
@@ -94,6 +94,41 @@ presentations of the same simulation.
 ### New in prototype v0.2.1 (Linear 2DS-3)
 
 - **Peek from depth cover with the observe key.** Off the lane (FAR in a depth zone) with full-height cover directly ahead, such as the far jamb at station C, the body is in *depth cover* and the HUD offers `F peek`. Holding `F` leans the head toward the lane until the eye clears the cover's lane-side edge by 0.10 m (at most 1.0 m of lean; cover whose edge is farther away is not depth cover). Only the eye and the head sample move: the body collider stays put and the rifle stays lowered behind the cover, so the firing line still ends on the jamb, the same split as observe over a low wall. Standing or crouched, not prone; moving or aiming cancels it. The lean is stopped short of any solid the head would enter. Tuning: `PEEK` in `src/shared/tuning.ts`.
+
+### New in prototype v0.2.2 (Linear 2DS-4)
+
+- **Activate cameras with `U`.** `U` toggles the friendly camera link LIVE ⇄ OFFLINE through the same `updateConfig` mutation the inspector uses (revision bumps). A jammed or destroyed link cannot be activated from the field; with the API unreachable the toggle still applies locally.
+- **Every camera sits on the lane plane (z = 0)** and has a 0.34 m shot proxy, so the default aim depth can hit it. CAM 01 moved from the back wall onto the station-B face of the station-C lintel (same view of the far room, same crate blind spot). **Shooting a camera destroys it**, yours or theirs: it stops feeding sight at once, its status record shows DESTROYED and the wreck droops on its bracket.
+- **Deployable cameras in the inventory.** `1` equips the rifle, `2` a camera (two per preset; since v0.2.5 the camera is on `3`). With the camera equipped, a ghost shows where it would go and left mouse places it: it snaps to the exposed surface nearest the pointer (within 1.0 m): the floor (GROUND), the ceiling or a lintel underside (CEILING), the side of a wall or jamb (WALL) or any face of a prop such as a low wall or crate (COVER). It must be within 3.0 m of the chest with a clear line; reaching over the cover you hide behind is fine, reaching through a wall is not. A placed camera looks the way you face (or away from its wall) with a per-mount pitch; it feeds sight only while the link is LIVE. Tuning: `CAMERA` in `src/shared/tuning.ts`; placement in `src/simulation/deploy.ts`.
+- **Cameras are dynamic objects for both sides.** The player sees any device (including their own, per the handoff) only while some friendly observer sees it. The opposition now has its own observed set: each OPFOR actor's eye (same FOV/range rules as yours) plus OPFOR cameras. Your cameras, and you, are known to the opposition only through those view cones. The developer view draws OPFOR view fans, their clear sight rays (red) and, in the inspector, which observer spotted each of your cameras.
+- **Preset 8, Camera war**: two cameras in the inventory, OPFOR A beyond the low wall and an OPFOR camera under the ceiling.
+
+### New in prototype v0.2.3 (Linear 2DS-5)
+
+- **Low ready unless aiming.** The rifle now points at the pointer only while the right mouse button is held. Otherwise it rests muzzle-down at a per-stance low-ready pitch (−50° standing, −45° crouched, −8° prone, `LOW_READY_PITCH`), and the mechanical muzzle goes with it. The reticle turns into a dashed ring reading `low ready · hold RMB to aim` and the HUD shows `LOW READY`.
+- **No shooting without aiming.** Left mouse from low ready is refused (`LOW READY · hold right mouse to aim`, no ammo spent). Sprinting cannot aim, so it cannot fire either. The developer *Test firing line* still probes the current muzzle without aiming. The inspector has a *Hold aim* latch so its Fire button keeps working without a mouse.
+- **Observe, then aim to raise the gun.** Behind waist-high cover, `F` observes with the rifle still at low ready below the top. Holding aim on top of that raises the rifle over the cover (aim-over): the body rises a little more, so more of it is exposed, but the muzzle clears the top and the shot can reach the target. Releasing aim drops back to observe. Hidden, peek and vault keep low ready.
+
+### New in prototype v0.2.4 (Linear 2DS-6)
+
+- **Higher-fidelity map.** Procedural canvas textures (cast concrete, steel wall panels, corrugated floor plate, stencilled ammunition crates) on every gameplay collider, plus decorative trim that never leaves its collider's bounds (low-wall caps and footings, steel edge posts on partitions and jambs, crate battens, locker vents, shelf boards) and back-wall dressing (kick plate, vents, conduit boxes, an extinguisher). The front ceiling beam is gone so ceiling cameras at z = 0 stay readable. Code: `src/scene/textures.ts`, `src/scene/props.ts`.
+- **Higher-fidelity soldiers.** Two-bone arms with elbows and gloves, neck, goggles and NVG mount, chest pouches, back pack, belt, knee pads, boot soles, a rifle with handguard, optic and muzzle device, and a team marker band on the upper arm (blue friendly, red OPFOR). The mechanical anchors are unchanged: the rifle tip is still the muzzle.
+- **Depth perception.** The camera is orthographic and exactly side-on, so size never changes with depth and the floor is edge-on. The cue that works is **depth haze**: fog over view depth leaves the front clear, barely touches the lane and makes FAR bodies and the back wall progressively hazier (`HAZE` in `sceneView.ts`). The busier back wall also catches clearer shadows.
+- **Lore-friendly depth-zone signs.** Each depth zone is marked in the world rather than with a floating label: a yellow/black facility sign on the back wall (`SERVICE DOOR B2`, `LOADING RECESS C1`, `CONTROL BAY A`, with a step-into-the-recess pictogram), hazard tape up the wall at both ends of the zone, and a hazard-painted kerb along the floor's front edge under it. The cyan zone labels and floor bands are now developer overlays only.
+
+### New in prototype v0.2.5 (Linear 2DS-7)
+
+- **Different guns, primary and sidearm carried together.** Weapon catalogue in `src/shared/weapons.ts`: primaries CARBINE (24 rounds), DMR 4× (10, scoped) and SMG (30); sidearms PISTOL (15) and MACHINE PISTOL (20). The player carries one primary and one sidearm at once: `1` primary, `2` sidearm, `3` deployable camera (the camera moved from 2 to 3). Each weapon keeps its own magazine; `R` reloads the one in hand. The inspector *Loadout* section swaps either slot (a sidearm cannot go in the primary slot); scenarios set the starting loadout (`SceneSeed.loadout`, also served over GraphQL).
+- **Weapons differ mechanically.** `reach` moves the mechanical muzzle with the barrel (DMR +0.16 m, pistol −0.10 m), so the shot still leaves the drawn tip; `sway` scales the depth-sway amplitude (DMR steadier, machine pistol shakier); `heatPerShot` sets recoil. Visually the pistol is held two-handed at the grip and the primary hangs slung on the back while the sidearm is out.
+- **Scopes look further.** While aiming a scoped weapon the follow camera pans 7 m further in the facing direction (translation only, still clamped to the room); the HUD shows `SCOPE 4×` and the reticle label says `scope 4×`.
+- **Preset 9, Marksman**: DMR + pistol at the far end of station A.
+
+### New in prototype v0.2.6 (Linear 2DS-8)
+
+- **Camera operator mode (`O`).** With the link live, `O` takes over the next live friendly camera's feed (press again for the next camera, then back to your body; the inspector has direct buttons). The view follows the camera, the stage gets a red feed frame, and the player view shows only what that camera sees. The feed drops back to the body as soon as the link goes down or the device is destroyed.
+- **The body is idle while operating.** Movement, stance, vault, depth moves, reload, slot changes, bracing and placing are all refused (`OPERATING CAM 02 · O to return to your body`); the body stands still with the rifle at low ready, still exposed to the opposition.
+- **Camera gun.** Every friendly camera carries a small gun with 6 rounds (`CAMERA.gunMagazine`). It uses the same aiming mechanics (hold right mouse to aim, depth sway from the selected depth, recoil heat) and can only shoot inside the camera's field of view (`OUTSIDE CAM 02 ARC`). Shots leave the lens, so your body is never in the line of fire.
+- **Reload at the camera (`G`).** An empty camera gun cannot be reloaded from the feed. Return to the body, walk up to the camera (within the same 3.0 m arm's reach used for placing) and press `G`; the HUD prompts `G · reload CAM 02 gun` when one is in reach.
 
 Mechanics (all in plain TypeScript under `src/simulation/`, independent of
 React and Three.js):
@@ -142,11 +177,15 @@ React and Three.js):
 | C | toggle crouch (crouched at waist-high cover = hidden); from prone, rise to a crouch |
 | Z | toggle prone (slow crawl, lowest profile, steadiest aim, cannot vault) |
 | F (hold) | observe above waist-high cover; off the lane behind full-height depth cover, peek around its edge toward the lane |
-| Right mouse (hold) | aim; from crouched cover: aim over |
-| Left mouse | fire (disabled while hidden or vaulting) |
-| Mouse height | the arms and rifle swing toward the pointer; the shot leaves the barrel tip |
+| Right mouse (hold) | aim: raise the rifle and point it at the pointer (otherwise it rests at low ready); at crouched cover, with or without F, aim over |
+| Left mouse | fire, only while aiming (never from low ready, hidden or vaulting) |
+| Mouse height | while aiming, the arms and rifle swing toward the pointer; the shot leaves the barrel tip |
 | Q / E | selected aim depth − / + (0.25 m steps, −1.5…+1.0 m); never auto-locks to an enemy |
 | B | brace on cover within reach (not while moving or sprinting) |
+| 1 / 2 / 3 | equip the primary / the sidearm / a deployable camera (left mouse then places it on the nearest floor, ceiling or cover) |
+| U | camera link on/off (an `updateConfig` mutation) |
+| O | operate the next live camera's feed (body idle; aim/fire drive the camera gun), again to cycle back to the body |
+| G | reload the gun of a friendly camera within arm's reach |
 | V | developer view |
 | P / . | pause / step one tick |
 | R | reload |
@@ -291,6 +330,48 @@ scenario mid-mutation.
 | FAR behind the station-C far jamb counts as depth cover; target unseen, player unexposed | verified | `tests/peek.test.ts`; screenshot 11a |
 | Hold F in depth cover peeks: eye leans past the jamb edge, target observed, only the head exposed, body and muzzle stay behind the jamb (firing line ends on it) | verified | `tests/peek.test.ts`; screenshots 11b, 11c |
 | Releasing F, aiming or moving ends the peek; works standing and crouched, not prone; no depth cover on the lane; observe over low walls unchanged | verified | `tests/peek.test.ts` |
+
+### Prototype v0.2.2 (2DS-4)
+
+| Item | Result | Evidence |
+| --- | --- | --- |
+| U toggles the friendly link through a real `updateConfig` mutation; a jammed link is refused | verified | `tests/cameras.test.ts` (SessionController) |
+| Every camera sits at depth 0; shooting a camera (either team) destroys it and stops its sight | verified | `tests/cameras.test.ts` |
+| Deployable cameras: inventory slot, LMB places, snaps to cover top / ground / ceiling, refuses out of reach, through walls and in mid-air | verified | `tests/cameras.test.ts` |
+| Opposition sees friendly cameras only through its own view cones (actor eyes, OPFOR cameras) | verified | `tests/cameras.test.ts` |
+
+### Prototype v0.2.3 (2DS-5)
+
+| Item | Result | Evidence |
+| --- | --- | --- |
+| Without aim the rifle rests at low ready (muzzle toward the ground) whatever the pointer does; with aim it points at the pointer | verified | `tests/aim-ready.test.ts`, `tests/stance-vault.test.ts` |
+| Firing requires aiming: refused from low ready (no ammo spent) and while sprinting; inspector latch counts as aiming | verified | `tests/aim-ready.test.ts` |
+| Observe keeps the rifle low; observe + aim raises it over cover (taller, more exposed, shot reaches the target) | verified | `tests/aim-ready.test.ts` |
+
+### Prototype v0.2.4 (2DS-6)
+
+| Item | Result | Evidence |
+| --- | --- | --- |
+| Textured, trimmed map and detailed soldiers; decoration never leaves collider bounds | verified | `tests/props.test.ts`; manual check in the browser |
+| Depth zones marked by in-world signs, wall tape and floor kerb; cyan labels developer-only | verified | `tests/props.test.ts`; manual check in the browser |
+| Depth haze makes FAR bodies hazier than the lane | partial | visual only, no automated test |
+
+### Prototype v0.2.5 (2DS-7)
+
+| Item | Result | Evidence |
+| --- | --- | --- |
+| Primary and sidearm carried together with separate magazines; slot swap refuses the wrong class | verified | `tests/weapons.test.ts` |
+| Barrel reach moves the mechanical muzzle; sway and recoil differ per weapon | verified | `tests/weapons.test.ts` |
+| Aiming a scoped weapon pans the view ahead in the facing direction; unscoped or unaimed does not | verified | `tests/weapons.test.ts`; manual check in the browser |
+
+### Prototype v0.2.6 (2DS-8)
+
+| Item | Result | Evidence |
+| --- | --- | --- |
+| O switches to a live camera's perspective (cycles, needs the link); the view shows that feed's sightings | verified | `tests/operator.test.ts`; manual check in the browser |
+| Body takes no physical commands and does not move while operating | verified | `tests/operator.test.ts` |
+| Camera gun: limited ammo, same aim rules, arc-limited, fires from the lens, body ammo untouched | verified | `tests/operator.test.ts`; manual check in the browser (HIT, GUN 5/6) |
+| Empty camera gun reloads only at the device (G within reach); feed drops on link loss or destruction | verified | `tests/operator.test.ts` |
 
 ### GraphQL and application state
 

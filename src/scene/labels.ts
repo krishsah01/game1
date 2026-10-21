@@ -48,6 +48,11 @@ export class LabelLayer {
     this.labels.delete(id);
   }
 
+  /** Shows or hides (without removing) every label whose id starts with `prefix`. */
+  setHidden(prefix: string, hidden: boolean): void {
+    for (const [id, h] of this.labels) if (id.startsWith(prefix)) h.el.style.display = hidden ? 'none' : '';
+  }
+
   /** Hides labels whose ids are not in `keep` (prefix match). */
   prune(prefix: string, keep: Set<string>): void {
     for (const id of [...this.labels.keys()]) {
