@@ -1,5 +1,6 @@
 /** Input contract between the app shell and the simulation. */
 import type { MoveMode, Stance } from '../shared/types.ts';
+import type { WeaponId } from '../shared/weapons.ts';
 
 export interface HeldInput {
   /** -1 left, 0 none, +1 right */
@@ -14,8 +15,9 @@ export interface HeldInput {
 
 export const emptyHeld = (): HeldInput => ({ moveX: 0, observe: false, aim: false, pointerWorld: null });
 
-/** Inventory slots: 1 = rifle, 2 = deployable camera. */
-export type EquipSlot = 'RIFLE' | 'CAMERA';
+/** Inventory slots: 1 = primary, 2 = sidearm, 3 = deployable camera. */
+export type EquipSlot = 'PRIMARY' | 'SIDEARM' | 'CAMERA';
+export type FirearmSlot = Exclude<EquipSlot, 'CAMERA'>;
 
 export type CoverIntent = 'hidden' | 'observe' | 'aimOver' | null;
 
@@ -34,6 +36,8 @@ export type Command =
   /** LMB: fires the rifle, or places a camera when the camera slot is equipped. */
   | { type: 'fire' }
   | { type: 'equip'; slot: EquipSlot }
+  /** Swap the weapon carried in a firearm slot (comes with a full magazine). */
+  | { type: 'setLoadout'; slot: FirearmSlot; weapon: WeaponId }
   /** Place a camera at the snap surface nearest `at` (defaults to the pointer). */
   | { type: 'deployCamera'; at?: { x: number; y: number } }
   | { type: 'testFiringLine' }

@@ -21,6 +21,7 @@ export const typeDefs = /* GraphQL */ `
     DEPTH_SHOT
     CONTROL_POINT
     CAMERA_WAR
+    MARKSMAN
   }
 
   enum EntityKind { PLAYER ENEMY DROPPED_GEAR CAMERA }
@@ -29,6 +30,10 @@ export const typeDefs = /* GraphQL */ `
   enum CameraStatus { ONLINE OFFLINE JAMMED DESTROYED }
   "What a camera is fixed to. Cameras always sit on the lane plane (z = 0)."
   enum CameraMount { WALL CEILING GROUND COVER }
+  enum WeaponId { CARBINE DMR SMG PISTOL MACHINE_PISTOL }
+
+  "Primary and sidearm carried at the same time."
+  type Loadout { primary: WeaponId!, sidearm: WeaponId! }
   enum Stance { STANDING CROUCHED PRONE }
   enum MoveMode { WALK COMBAT SPRINT }
 
@@ -92,6 +97,7 @@ export const typeDefs = /* GraphQL */ `
     cameras: [ReconCameraSeed!]!
     "Deployable cameras in the player's inventory at the start."
     deployableCameras: Int!
+    loadout: Loadout!
     roomMinX: Float!
     roomMaxX: Float!
     stationLabels: [StationLabel!]!

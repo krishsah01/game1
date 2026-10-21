@@ -47,6 +47,7 @@ import type { Bounds, CameraStatus, ColliderSeed, SceneSeed } from '../shared/ty
 import type { CameraRecord, EntityView, Presentation, ViewMode } from '../simulation/world.ts';
 import { fitOrthographic, followCenterX } from './cameraRig.ts';
 import { LabelLayer } from './labels.ts';
+import { WEAPONS } from '../shared/weapons.ts';
 import { backWallDressing, colliderTexture, colliderTrim, zoneSignage } from './props.ts';
 import { ENEMY_TINT, FRIENDLY_TINT, makeBag, makeBarrierGeometry, makeCameraDevice, orientCameraDevice, SoldierModel } from './models.ts';
 
@@ -506,7 +507,9 @@ export class SceneView {
     const dev = opts.mode === 'developer';
 
     // Camera follow (translation only, clamped to the room).
-    const target = followCenterX(p.player.position.x + p.player.facingX * FOLLOW_LEAD * this.halfWidth(), this.seed.roomMinX, this.seed.roomMaxX, this.halfWidth());
+    // A scope pans the view further in the facing direction while aiming (translation only).
+    const lead = FOLLOW_LEAD * this.halfWidth() + p.player.lookAhead;
+    const target = followCenterX(p.player.position.x + p.player.facingX * lead, this.seed.roomMinX, this.seed.roomMaxX, this.halfWidth());
     this.followX += (target - this.followX) * (1 - Math.exp(-dt / 0.45));
     fitOrthographic(this.camera, this.width / this.height, VIEW_HEIGHT, this.followX, VIEW_CENTER_Y);
 
@@ -523,6 +526,7 @@ export class SceneView {
     this.player.setTarget(pl.cover.anchors);
     // Arms and rifle follow the mechanical aim pitch; the body tucks while vaulting; the head leans out on a peek.
     this.player.setPose({ aimPitch: pl.cover.aimPitch, vaultProgress: pl.vaultProgress, peekLean: pl.cover.peekLean });
+    this.player.setWeapon(pl.weapon.model, pl.equipped === 'SIDEARM' ? WEAPONS[pl.loadout.primary].model : null);
     this.player.update(dt, pl.facingX, pl.moving, pl.moveMode === 'SPRINT' && pl.stance !== 'PRONE');
     this.player.setOutline(false);
     const keepLabels = new Set<string>();

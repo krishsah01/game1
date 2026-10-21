@@ -167,6 +167,8 @@ export interface CoverInputs {
   aimPitch: number;
   /** A vault is in progress: tucked anchors, no cover state, rifle lowered. */
   vaulting: boolean;
+  /** Muzzle reach of the equipped weapon relative to the carbine (WeaponSpec.reach). */
+  weaponReach?: number;
 }
 
 /**
@@ -192,17 +194,20 @@ export function evaluateCover(input: CoverInputs, candidates: CoverCandidate[]):
   else if (input.stance === 'PRONE') anchors = ANCHORS.prone;
   else if (input.stance === 'CROUCHED') anchors = ANCHORS.crouched;
   else anchors = aiming ? ANCHORS.standingAim : ANCHORS.standing;
+  const reach = input.weaponReach ?? 0;
+  const withReach = (a: StanceAnchors): StanceAnchors => (reach === 0 ? a : { ...a, muzzleForward: a.muzzleForward + reach });
+  anchors = withReach(anchors);
 
   if (!input.vaulting && input.stance === 'CROUCHED' && nearCover) {
     if (aiming && !input.moving) {
       state = 'aimOver';
-      anchors = ANCHORS.aimOver;
+      anchors = withReach(ANCHORS.aimOver);
     } else if (input.observeHeld && !input.moving) {
       state = 'observe';
-      anchors = ANCHORS.observe;
+      anchors = withReach(ANCHORS.observe);
     } else {
       state = 'hidden';
-      anchors = ANCHORS.crouched;
+      anchors = withReach(ANCHORS.crouched);
     }
   }
   let peekLean = 0;

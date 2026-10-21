@@ -6,6 +6,7 @@
 import { useCallback, useState } from 'react';
 import type { ApiClient } from '../graphql/client.ts';
 import { SELECTED_DEPTH_MAX, SELECTED_DEPTH_MIN } from '../shared/tuning.ts';
+import { PRIMARIES, SIDEARMS, WEAPONS } from '../shared/weapons.ts';
 import type { CameraStatus, DemoConfig, MoveMode } from '../shared/types.ts';
 import type { Command } from '../simulation/input.ts';
 import type { Presentation } from '../simulation/world.ts';
@@ -233,11 +234,14 @@ export function Inspector({ controller, state, p, mode, devOptions, onDevOptions
         </div>
         <div className="btn-row">
           <span className="muted small">Inventory:</span>
-          <button className={pl?.equipped === 'RIFLE' ? 'on' : ''} onClick={() => cmd({ type: 'equip', slot: 'RIFLE' })}>
-            1 Rifle
+          <button className={pl?.equipped === 'PRIMARY' ? 'on' : ''} onClick={() => cmd({ type: 'equip', slot: 'PRIMARY' })}>
+            1 Primary
+          </button>
+          <button className={pl?.equipped === 'SIDEARM' ? 'on' : ''} onClick={() => cmd({ type: 'equip', slot: 'SIDEARM' })}>
+            2 Sidearm
           </button>
           <button className={pl?.equipped === 'CAMERA' ? 'on' : ''} disabled={!pl || pl.cameraCharges === 0} onClick={() => cmd({ type: 'equip', slot: 'CAMERA' })}>
-            2 Camera ×{pl?.cameraCharges ?? 0}
+            3 Camera ×{pl?.cameraCharges ?? 0}
           </button>
         </div>
         {p && (
@@ -261,6 +265,45 @@ export function Inspector({ controller, state, p, mode, devOptions, onDevOptions
         <p className="small muted">
           Link status is player-owned UI. Every device, yours or theirs, is drawn only while it is actually observed, sits at depth 0 and can be shot. The opposition learns of your cameras only through its own view cones (developer view shows who has spotted them).
         </p>
+      </Section>
+
+      <Section title="Loadout">
+        <div className="btn-row">
+          <span className="muted small">Primary:</span>
+          {PRIMARIES.map((id) => (
+            <button key={id} className={pl?.loadout.primary === id ? 'on' : ''} onClick={() => cmd({ type: 'setLoadout', slot: 'PRIMARY', weapon: id })}>
+              {WEAPONS[id].label}
+            </button>
+          ))}
+        </div>
+        <div className="btn-row">
+          <span className="muted small">Sidearm:</span>
+          {SIDEARMS.map((id) => (
+            <button key={id} className={pl?.loadout.sidearm === id ? 'on' : ''} onClick={() => cmd({ type: 'setLoadout', slot: 'SIDEARM', weapon: id })}>
+              {WEAPONS[id].label}
+            </button>
+          ))}
+        </div>
+        {pl && (
+          <table className="kv">
+            <tbody>
+              {[pl.loadout.primary, pl.loadout.sidearm].map((id) => {
+                const w = WEAPONS[id];
+                return (
+                  <tr key={id}>
+                    <td>{w.label}</td>
+                    <td>
+                      mag {w.magazine} · reach {w.reach >= 0 ? '+' : ''}
+                      {w.reach.toFixed(2)} m · sway ×{w.sway} · recoil {w.heatPerShot}
+                      {w.scope ? ` · scope ${w.scope.magnification}× (look-ahead ${w.scope.lookAhead} m)` : ''}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+        <p className="small muted">Primary and sidearm are carried together (1 / 2), each with its own magazine. Swapping a weapon here issues a fresh magazine.</p>
       </Section>
 
       <Section title="Smoke and noise">

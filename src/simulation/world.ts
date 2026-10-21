@@ -20,7 +20,6 @@ import {
   DEPTH_SPEED,
   FIXED_STEP,
   LANE_HALF_WIDTH,
-  MAGAZINE_SIZE,
   MAX_FRAME_DELTA,
   MOVE_SPEED,
   PRONE_SPEED_FACTOR,
@@ -29,11 +28,12 @@ import {
   depthWord,
   type StanceAnchors,
 } from '../shared/tuning.ts';
+import { WEAPONS, type Loadout, type WeaponSpec } from '../shared/weapons.ts';
 import type { Bounds, CameraMount, CameraStatus, DemoConfig, DemoSession, DepthZone, EntityKind, MoveMode, Scenario, SceneSeed, Stance, Team, Vec3 } from '../shared/types.ts';
 import { applyRecoil, createAimState, currentDepthOffset, setSelectedDepth, stepSelectedDepth, updateAim, type AimState } from './aiming.ts';
 import { coverCandidates, evaluateCover, findVaultableAhead, type CoverCandidate, type CoverEvaluation } from './cover.ts';
 import { deployedCameraSeed, findPlacement, placementSurfaces, type Placement, type PlacementSurface } from './deploy.ts';
-import { emptyHeld, type Command, type CoverIntent, type DepthLane, type EquipSlot, type HeldInput } from './input.ts';
+import { emptyHeld, type Command, type CoverIntent, type DepthLane, type EquipSlot, type FirearmSlot, type HeldInput } from './input.ts';
 import { createKnowledge, expireLastKnown, updateObservation, type KnowledgeState, type LastKnownRecord } from './knowledge.ts';
 import { blockersFromColliders, bodyBlockedBy, depthPathBlockedBy, moveBody, zoneAt, zoneFarZ, type MovementBlocker } from './movement.ts';
 import { createNoise, playerNoiseLabel, updateNoise, type NoisePulse, type NoiseState } from './noise.ts';
@@ -83,9 +83,14 @@ export interface PlayerState {
   depthTargetZ: number | null;
   /** Vault in progress, or null. */
   vault: VaultState | null;
+  /** Rounds in the equipped firearm's magazine (the primary's while the camera is out). */
   ammo: number;
   shotsFired: number;
-  /** Equipped inventory slot (1 rifle, 2 camera). */
+  /** Primary and sidearm, carried at the same time. */
+  loadout: Loadout;
+  /** Rounds left per firearm slot; each weapon keeps its own magazine. */
+  magazines: Record<FirearmSlot, number>;
+  /** Equipped inventory slot (1 primary, 2 sidearm, 3 camera). */
   equipped: EquipSlot;
   /** Deployable cameras left in the inventory. */
   cameraCharges: number;
@@ -180,7 +185,19 @@ export interface Presentation {
   paused: boolean;
   scene: SceneSeed;
   config: DemoConfig;
-  player: PlayerState & { noiseLabel: string; zoneLabel: string | null; zoneFarZ: number | null; coverId: string | null; vaultProgress: number | null };
+  player: PlayerState & {
+    noiseLabel: string;
+    zoneLabel: string | null;
+    zoneFarZ: number | null;
+    coverId: string | null;
+    vaultProgress: number | null;
+    /** Firearm in hand (the primary while the camera slot is out). */
+    weapon: WeaponSpec;
+    /** Aiming through a scope right now. */
+    scoped: boolean;
+    /** Metres the view pans ahead in the facing direction (scope look-ahead), 0 otherwise. */
+    lookAhead: number;
+  };
   /** In player mode only observed entities are listed. */
   entities: EntityView[];
   lastKnown: { record: LastKnownRecord; age: number }[];
@@ -319,8 +336,9 @@ export class World {
     this.opforSight = [];
     this.opforObservers = [];
     const position = { ...playerSeed.position };
+    const loadout = { ...this.scene.loadout };
     const cover = evaluateCover(
-      { position, facingX: playerSeed.facingX, stance: playerSeed.stance, moving: false, observeHeld: false, aimHeld: false, sprinting: false, aimPitch: 0, vaulting: false },
+      { position, facingX: playerSeed.facingX, stance: playerSeed.stance, moving: false, observeHeld: false, aimHeld: false, sprinting: false, aimPitch: 0, vaulting: false, weaponReach: WEAPONS[loadout.primary].reach },
       this.coverCands,
     );
     this.player = {
@@ -337,9 +355,11 @@ export class World {
       depthLane: Math.abs(position.z) > LANE_HALF_WIDTH ? 'FAR' : 'LANE',
       depthTargetZ: null,
       vault: null,
-      ammo: MAGAZINE_SIZE,
+      ammo: WEAPONS[loadout.primary].magazine,
       shotsFired: 0,
-      equipped: 'RIFLE',
+      loadout,
+      magazines: { PRIMARY: WEAPONS[loadout.primary].magazine, SIDEARM: WEAPONS[loadout.sidearm].magazine },
+      equipped: 'PRIMARY',
       cameraCharges: this.scene.deployableCameras,
       placement: null,
       lastBlockedBy: null,
@@ -422,10 +442,27 @@ export class World {
         return null;
       case 'testFiringLine':
         return this.fire(true);
-      case 'reload':
-        p.ammo = MAGAZINE_SIZE;
-        this.pushLog('Reloaded.');
+      case 'reload': {
+        const slot = this.firearmSlot();
+        p.magazines[slot] = this.weapon().magazine;
+        p.ammo = p.magazines[slot];
+        this.pushLog(`Reloaded ${this.weapon().label}.`);
         return null;
+      }
+      case 'setLoadout': {
+        const spec = WEAPONS[cmd.weapon];
+        if (!spec || spec.class !== cmd.slot) {
+          this.feedback(`${cmd.weapon} IS NOT A ${cmd.slot}`);
+          return null;
+        }
+        if (cmd.slot === 'PRIMARY') p.loadout.primary = cmd.weapon;
+        else p.loadout.sidearm = cmd.weapon;
+        p.magazines[cmd.slot] = spec.magazine;
+        if (this.firearmSlot() === cmd.slot) p.ammo = spec.magazine;
+        this.feedback(`${cmd.slot} · ${spec.label}`);
+        this.pushLog(`Loadout: ${cmd.slot.toLowerCase()} is now ${spec.label}.`);
+        return null;
+      }
       case 'stepDepth':
         stepSelectedDepth(this.aim, cmd.direction);
         return null;
@@ -546,6 +583,17 @@ export class World {
     this.feedback(text);
   }
 
+  /** Firearm slot in hand: the primary while the camera slot is out. */
+  firearmSlot(): FirearmSlot {
+    return this.player.equipped === 'CAMERA' ? 'PRIMARY' : this.player.equipped;
+  }
+
+  /** Spec of the firearm in hand. */
+  weapon(): WeaponSpec {
+    const p = this.player;
+    return WEAPONS[this.firearmSlot() === 'PRIMARY' ? p.loadout.primary : p.loadout.sidearm];
+  }
+
   private equip(slot: EquipSlot): void {
     const p = this.player;
     if (slot === 'CAMERA' && p.cameraCharges <= 0) {
@@ -555,7 +603,8 @@ export class World {
     if (p.equipped === slot) return;
     p.equipped = slot;
     if (slot === 'CAMERA') p.braced = false;
-    this.feedback(slot === 'CAMERA' ? `CAMERA ×${p.cameraCharges} · LMB to place` : 'RIFLE');
+    p.ammo = p.magazines[this.firearmSlot()];
+    this.feedback(slot === 'CAMERA' ? `CAMERA ×${p.cameraCharges} · LMB to place` : this.weapon().label);
   }
 
   /** Chest point placement reach and line-of-reach are measured from. */
@@ -598,7 +647,7 @@ export class World {
     const seed = deployedCameraSeed(`cam-d${this.deployedCount}`, label, 'FRIENDLY', placement, p.facingX);
     this.cameras.push(createCamera(seed, true));
     p.cameraCharges -= 1;
-    if (p.cameraCharges === 0) p.equipped = 'RIFLE';
+    if (p.cameraCharges === 0) p.equipped = 'PRIMARY';
     const linked = this.config.cameraStatus === 'ONLINE';
     this.feedback(`${label} PLACED · ${seed.mount}${linked ? ' · LIVE' : ' · U to link'}`);
     this.pushLog(`${label} deployed on ${placement.surfaceId} (${seed.mount}) at x=${seed.position.x.toFixed(2)} y=${seed.position.y.toFixed(2)}.`);
@@ -812,6 +861,7 @@ export class World {
         sprinting: sprintMode && p.moving,
         aimPitch,
         vaulting: p.vault !== null,
+        weaponReach: this.weapon().reach,
       },
       this.coverCands,
     );
@@ -891,7 +941,7 @@ export class World {
     }
 
     // ---- 8. aiming -------------------------------------------------------
-    updateAim(this.aim, dt, cfg, { moving: p.moving, moveMode: p.moveMode, stance: p.stance, aiming: p.cover.aiming, braced: p.braced, vaulting: p.vault !== null }, justStopped);
+    updateAim(this.aim, dt, cfg, { moving: p.moving, moveMode: p.moveMode, stance: p.stance, aiming: p.cover.aiming, braced: p.braced, vaulting: p.vault !== null, weaponSway: this.weapon().sway }, justStopped);
 
     // ---- 9. noise --------------------------------------------------------
     if (dt > 0) {
@@ -1062,9 +1112,11 @@ export class World {
     const offset = currentDepthOffset(this.aim);
     const result = resolveShot(p.cover.muzzle, this.aimPoint(offset), this.shotTargets(), { x: p.facingX, y: 0, z: 0 });
     if (!test) {
-      p.ammo -= 1;
+      const slot = this.firearmSlot();
+      p.magazines[slot] -= 1;
+      p.ammo = p.magazines[slot];
       p.shotsFired += 1;
-      applyRecoil(this.aim);
+      applyRecoil(this.aim, this.weapon().heatPerShot);
       this.aim.lastSampledOffset = offset;
     } else {
       this.lastFiringLineTest = { result, simTime: this.simTime };
@@ -1182,6 +1234,7 @@ export class World {
       }
     }
     const offset = currentDepthOffset(this.aim);
+    const scoped = p.cover.aiming && p.equipped !== 'CAMERA' && this.weapon().scope !== null;
     return {
       mode,
       simTime: this.simTime,
@@ -1198,6 +1251,9 @@ export class World {
         zoneFarZ: p.zone ? zoneFarZ(p.zone) : null,
         coverId: p.cover.nearCover?.id ?? null,
         vaultProgress: p.vault ? p.vault.elapsed / p.vault.duration : null,
+        weapon: this.weapon(),
+        scoped,
+        lookAhead: scoped ? this.weapon().scope!.lookAhead : 0,
       },
       entities,
       lastKnown: k.lastKnown.map((record) => ({ record, age: this.simTime - record.simTime })),

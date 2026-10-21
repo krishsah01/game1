@@ -41,6 +41,7 @@ export const SCENARIO = /* GraphQL */ `
         captureBounds ${BOUNDS}
         cameras { id label team mount mountNormal ${VEC3} position ${VEC3} lookAt ${VEC3} fovDegrees range }
         deployableCameras
+        loadout { primary sidearm }
         stationLabels { id label x }
       }
     }

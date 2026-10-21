@@ -8,7 +8,7 @@
  *   S / ↓        back to lane  Space  vault the obstacle ahead
  *   C crouch · Z prone · F (hold) observe / peek · RMB (hold) aim · LMB fire
  *   Tab cycles walk → combat → sprint · Q / E aim depth · B brace
- *   1 rifle · 2 deployable camera (LMB places it) · U camera link on/off
+ *   1 primary · 2 sidearm · 3 deployable camera (LMB places it) · U camera link on/off
  *   V developer view · P pause · . step · R reload · Esc help
  */
 import { emptyHeld, type HeldInput } from '../simulation/input.ts';
@@ -24,7 +24,7 @@ export interface InputCallbacks {
 }
 
 const FORM_TAGS = new Set(['INPUT', 'TEXTAREA', 'SELECT', 'BUTTON']);
-const HANDLED = new Set(['a', 'd', 'w', 's', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Tab', 'c', 'z', 'f', 'q', 'e', 'b', 'v', 'r', 'Escape', 'p', '.', 'u', '1', '2']);
+const HANDLED = new Set(['a', 'd', 'w', 's', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', ' ', 'Tab', 'c', 'z', 'f', 'q', 'e', 'b', 'v', 'r', 'Escape', 'p', '.', 'u', '1', '2', '3']);
 
 export class InputController {
   readonly held: HeldInput = emptyHeld();
@@ -156,9 +156,12 @@ export class InputController {
         world.command({ type: 'reload' });
         break;
       case '1':
-        world.command({ type: 'equip', slot: 'RIFLE' });
+        world.command({ type: 'equip', slot: 'PRIMARY' });
         break;
       case '2':
+        world.command({ type: 'equip', slot: 'SIDEARM' });
+        break;
+      case '3':
         world.command({ type: 'equip', slot: 'CAMERA' });
         break;
       case 'u':

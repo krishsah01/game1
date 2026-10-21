@@ -96,7 +96,7 @@ export function SceneCanvas({ controller, mode, devOptions, onToggleDeveloper, o
           const ry = input.pointerClient.y - rect.top;
           reticle.style.transform = `translate(${rx.toFixed(1)}px, ${ry.toFixed(1)}px)`;
           // Low ready: the rifle is not pointed at the reticle and cannot fire.
-          const lowReady = !p.player.cover.aiming && p.player.equipped === 'RIFLE';
+          const lowReady = !p.player.cover.aiming && p.player.equipped !== 'CAMERA';
           reticle.style.opacity = lowReady ? '0.45' : '1';
           reticle.classList.toggle('low-ready', lowReady);
           // World-Z offset in pixels at the current zoom; the ring and guide grow with the amplitude so the dot never clips.
@@ -120,7 +120,7 @@ export function SceneCanvas({ controller, mode, devOptions, onToggleDeveloper, o
             const z = p.aim.selectedDepth;
             reticleLabelRef.current.textContent = lowReady
               ? 'low ready · hold RMB to aim'
-              : `${p.aim.depthWord} · z ${z >= 0 ? '+' : ''}${z.toFixed(2)} · ${p.aim.situation.toLowerCase()}`;
+              : `${p.player.scoped ? `scope ${p.player.weapon.scope?.magnification}× · ` : ''}${p.aim.depthWord} · z ${z >= 0 ? '+' : ''}${z.toFixed(2)} · ${p.aim.situation.toLowerCase()}`;
           }
         } else reticle.style.opacity = '0';
       }

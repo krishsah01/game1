@@ -24,6 +24,9 @@ import {
   type Material,
 } from 'three';
 import type { StanceAnchors } from '../shared/tuning.ts';
+import { WEAPONS, type WeaponSpec } from '../shared/weapons.ts';
+
+type WeaponModel = WeaponSpec['model'];
 
 export interface SoldierTint {
   uniform: number;
@@ -81,6 +84,8 @@ export class SoldierModel {
   private vaultProgress: number | null = null;
   private peekLeanTarget = 0;
   private peekLean = 0;
+  private weapon: WeaponModel = WEAPONS.CARBINE.model;
+  private slungWeapon: WeaponModel | null = null;
 
   constructor(tint: SoldierTint) {
     const mk = (name: string, geo: BoxGeometry | SphereGeometry | CylinderGeometry, color: number) => {
@@ -131,6 +136,7 @@ export class SoldierModel {
     mk('muzzleDev', new BoxGeometry(0.06, 0.045, 0.045), 0x1c1f22);
     mk('stock', new BoxGeometry(0.2, 0.11, 0.06), 0x56473a);
     mk('mag', new BoxGeometry(0.06, 0.16, 0.05), 0x3a3f43);
+    mk('slung', new BoxGeometry(0.62, 0.06, 0.05), 0x3c4246);
     this.outline.visible = false;
     this.group.add(this.body, this.outline);
   }
@@ -144,6 +150,12 @@ export class SoldierModel {
   setTarget(anchors: StanceAnchors): void {
     this.targetAnchors = anchors;
     if (!this.current) this.snapPose(anchors);
+  }
+
+  /** Weapon in hand and, optionally, a long gun slung on the back (primary while the sidearm is out). */
+  setWeapon(inHand: WeaponModel, slung: WeaponModel | null = null): void {
+    this.weapon = inHand;
+    this.slungWeapon = slung;
   }
 
   /** Aim pitch and vault progress come from the simulation; the visual pitch is lightly smoothed. */
@@ -276,25 +288,34 @@ export class SoldierModel {
     const down: Pt = { x: f * u.y, y: -f * u.x }; // perpendicular, toward the ground when level
     const along = (d: number, drop = 0): Pt => ({ x: pivot.x + u.x * d + down.x * drop, y: pivot.y + u.y * d + down.y * drop });
     const tip = along(restLen);
-    const rifleLen = 0.62;
+    const wm = this.weapon;
+    const pistol = wm.grip === 'pistol';
+    const rifleLen = wm.length;
     const rz = Math.atan2(u.y, u.x);
     const rifleZ = 0.17 - prone * 0.05;
     const rifleC = along(restLen - rifleLen * 0.5);
     place(p.rifle!, rifleC.x, rifleC.y, rifleZ, rz);
+    p.rifle!.scale.x = rifleLen / 0.62;
     const stockC = along(restLen - rifleLen - 0.08, 0.015);
     place(p.stock!, stockC.x, stockC.y, rifleZ, rz);
-    const magC = along(restLen - 0.34, 0.1);
-    place(p.mag!, magC.x, magC.y, rifleZ, rz);
+    p.stock!.visible = wm.stock;
+    // Rifle magazine ahead of the trigger; a pistol's grip/magazine sits under the slide's rear.
+    const magC = pistol ? along(restLen - rifleLen * 0.8, 0.09) : along(restLen - Math.min(0.34, rifleLen * 0.6), 0.1);
+    place(p.mag!, magC.x, magC.y, rifleZ, rz + (pistol ? f * 0.25 : 0));
     const guardC = along(restLen - 0.16);
     place(p.handguard!, guardC.x, guardC.y, rifleZ, rz);
-    const opticC = along(restLen - 0.42, -0.065);
+    p.handguard!.visible = rifleLen >= 0.4;
+    const opticC = along(restLen - Math.min(0.42, rifleLen * 0.6), -0.065);
     place(p.optic!, opticC.x, opticC.y, rifleZ, rz);
+    p.optic!.visible = wm.optic !== 'none';
+    p.optic!.scale.x = wm.optic === 'scope' ? 2.2 : 1;
     const muzzleC = along(restLen - 0.02);
     place(p.muzzleDev!, muzzleC.x, muzzleC.y, rifleZ, rz);
+    p.muzzleDev!.visible = !pistol;
 
-    // Arms: hands on the foregrip and the pistol grip, drawn in front of the torso.
-    const handFront = along(restLen - 0.28, 0.07);
-    const handBack = along(restLen - 0.52, 0.12);
+    // Arms: hands on the foregrip and the pistol grip (a pistol is held two-handed at the grip).
+    const handFront = pistol ? along(restLen - rifleLen * 0.65, 0.07) : along(restLen - rifleLen * 0.45, 0.07);
+    const handBack = pistol ? along(restLen - rifleLen * 0.85, 0.1) : along(restLen - rifleLen * 0.84, 0.12);
     /** Two-bone arm: the elbow bends down/out so a short reach folds instead of shrinking. */
     const arm = (upper: Mesh, fore: Mesh, glove: Mesh, from: Pt, to: Pt, z: number): Pt => {
       const dist = Math.max(1e-6, Math.hypot(to.x - from.x, to.y - from.y));
@@ -315,12 +336,22 @@ export class SoldierModel {
     limb(p.marker!, mixPt(shoulderF, elbowF, 0.3), mixPt(shoulderF, elbowF, 0.5), 0.21, 0.06);
     void tip;
 
+    // A long gun slung diagonally across the back while the sidearm is in hand.
+    const sl = this.slungWeapon;
+    p.slung!.visible = sl !== null;
+    if (sl) {
+      const c = onTorso(0.6, -0.17);
+      place(p.slung!, c.x, c.y, -0.05 + lean * 0.3, Math.atan2(d.y, d.x) + f * 0.55);
+      p.slung!.scale.x = sl.length / 0.62;
+    }
+
     // Mirror the outline copy.
     for (const [name, mesh] of Object.entries(this.parts)) {
       const o = this.outlineParts[name]!;
       o.position.copy(mesh.position);
       o.rotation.copy(mesh.rotation);
       o.scale.copy(mesh.scale).multiplyScalar(1.1);
+      o.visible = mesh.visible;
     }
   }
 

@@ -442,8 +442,12 @@ code {
   margin-left: 4px;
 }
 .inventory {
-  gap: 6px;
+  gap: 4px 6px;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  max-width: 360px;
+  margin-left: auto;
+  font-size: 10px;
 }
 .inventory .slot {
   padding: 1px 6px;

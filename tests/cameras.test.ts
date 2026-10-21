@@ -77,9 +77,9 @@ describe('v0.2.2 cameras: placement', () => {
     expect(w.player.ammo).toBe(ammo); // placing is not firing
     expect(w.cameras.filter((c) => c.deployed)).toHaveLength(2);
     expect(w.player.cameraCharges).toBe(0);
-    expect(w.player.equipped).toBe('RIFLE');
+    expect(w.player.equipped).toBe('PRIMARY');
     w.command({ type: 'equip', slot: 'CAMERA' });
-    expect(w.player.equipped).toBe('RIFLE');
+    expect(w.player.equipped).toBe('PRIMARY');
   });
 });
 

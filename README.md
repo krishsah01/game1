@@ -78,7 +78,7 @@ drive gameplay (`src/shared/scenarios.ts`):
 | C / Depth (x 10…14.8) | partition with a 0.7 m slot (real 3D jambs), target at selectable depth | depth movement, muzzle obstruction, bracing, shot-depth sampling |
 | CONTROL A (x 14.8…19) | capture terminal, zone, tall crate stack the defender can hide behind | illustrative capture and CONTESTED |
 
-Eight guided presets reposition the player, actors and configuration on that
+Nine guided presets reposition the player, actors and configuration on that
 shared map; each is a real GraphQL session. A guided-tour button walks through
 them with captions. Player view and Developer view (`V`) are separate
 presentations of the same simulation.
@@ -99,7 +99,7 @@ presentations of the same simulation.
 
 - **Activate cameras with `U`.** `U` toggles the friendly camera link LIVE ⇄ OFFLINE through the same `updateConfig` mutation the inspector uses (revision bumps). A jammed or destroyed link cannot be activated from the field; with the API unreachable the toggle still applies locally.
 - **Every camera sits on the lane plane (z = 0)** and has a 0.34 m shot proxy, so the default aim depth can hit it. CAM 01 moved from the back wall onto the station-B face of the station-C lintel (same view of the far room, same crate blind spot). **Shooting a camera destroys it**, yours or theirs: it stops feeding sight at once, its status record shows DESTROYED and the wreck droops on its bracket.
-- **Deployable cameras in the inventory.** `1` equips the rifle, `2` a camera (two per preset). With the camera equipped, a ghost shows where it would go and left mouse places it: it snaps to the exposed surface nearest the pointer (within 1.0 m): the floor (GROUND), the ceiling or a lintel underside (CEILING), the side of a wall or jamb (WALL) or any face of a prop such as a low wall or crate (COVER). It must be within 3.0 m of the chest with a clear line; reaching over the cover you hide behind is fine, reaching through a wall is not. A placed camera looks the way you face (or away from its wall) with a per-mount pitch; it feeds sight only while the link is LIVE. Tuning: `CAMERA` in `src/shared/tuning.ts`; placement in `src/simulation/deploy.ts`.
+- **Deployable cameras in the inventory.** `1` equips the rifle, `2` a camera (two per preset; since v0.2.5 the camera is on `3`). With the camera equipped, a ghost shows where it would go and left mouse places it: it snaps to the exposed surface nearest the pointer (within 1.0 m): the floor (GROUND), the ceiling or a lintel underside (CEILING), the side of a wall or jamb (WALL) or any face of a prop such as a low wall or crate (COVER). It must be within 3.0 m of the chest with a clear line; reaching over the cover you hide behind is fine, reaching through a wall is not. A placed camera looks the way you face (or away from its wall) with a per-mount pitch; it feeds sight only while the link is LIVE. Tuning: `CAMERA` in `src/shared/tuning.ts`; placement in `src/simulation/deploy.ts`.
 - **Cameras are dynamic objects for both sides.** The player sees any device (including their own, per the handoff) only while some friendly observer sees it. The opposition now has its own observed set: each OPFOR actor's eye (same FOV/range rules as yours) plus OPFOR cameras. Your cameras, and you, are known to the opposition only through those view cones. The developer view draws OPFOR view fans, their clear sight rays (red) and, in the inspector, which observer spotted each of your cameras.
 - **Preset 8, Camera war**: two cameras in the inventory, OPFOR A beyond the low wall and an OPFOR camera under the ceiling.
 
@@ -115,6 +115,13 @@ presentations of the same simulation.
 - **Higher-fidelity soldiers.** Two-bone arms with elbows and gloves, neck, goggles and NVG mount, chest pouches, back pack, belt, knee pads, boot soles, a rifle with handguard, optic and muzzle device, and a team marker band on the upper arm (blue friendly, red OPFOR). The mechanical anchors are unchanged: the rifle tip is still the muzzle.
 - **Depth perception.** The camera is orthographic and exactly side-on, so size never changes with depth and the floor is edge-on. The cue that works is **depth haze**: fog over view depth leaves the front clear, barely touches the lane and makes FAR bodies and the back wall progressively hazier (`HAZE` in `sceneView.ts`). The busier back wall also catches clearer shadows.
 - **Lore-friendly depth-zone signs.** Each depth zone is marked in the world rather than with a floating label: a yellow/black facility sign on the back wall (`SERVICE DOOR B2`, `LOADING RECESS C1`, `CONTROL BAY A`, with a step-into-the-recess pictogram), hazard tape up the wall at both ends of the zone, and a hazard-painted kerb along the floor's front edge under it. The cyan zone labels and floor bands are now developer overlays only.
+
+### New in prototype v0.2.5 (Linear 2DS-7)
+
+- **Different guns, primary and sidearm carried together.** Weapon catalogue in `src/shared/weapons.ts`: primaries CARBINE (24 rounds), DMR 4× (10, scoped) and SMG (30); sidearms PISTOL (15) and MACHINE PISTOL (20). The player carries one primary and one sidearm at once: `1` primary, `2` sidearm, `3` deployable camera (the camera moved from 2 to 3). Each weapon keeps its own magazine; `R` reloads the one in hand. The inspector *Loadout* section swaps either slot (a sidearm cannot go in the primary slot); scenarios set the starting loadout (`SceneSeed.loadout`, also served over GraphQL).
+- **Weapons differ mechanically.** `reach` moves the mechanical muzzle with the barrel (DMR +0.16 m, pistol −0.10 m), so the shot still leaves the drawn tip; `sway` scales the depth-sway amplitude (DMR steadier, machine pistol shakier); `heatPerShot` sets recoil. Visually the pistol is held two-handed at the grip and the primary hangs slung on the back while the sidearm is out.
+- **Scopes look further.** While aiming a scoped weapon the follow camera pans 7 m further in the facing direction (translation only, still clamped to the room); the HUD shows `SCOPE 4×` and the reticle label says `scope 4×`.
+- **Preset 9, Marksman**: DMR + pistol at the far end of station A.
 
 Mechanics (all in plain TypeScript under `src/simulation/`, independent of
 React and Three.js):
@@ -168,7 +175,7 @@ React and Three.js):
 | Mouse height | while aiming, the arms and rifle swing toward the pointer; the shot leaves the barrel tip |
 | Q / E | selected aim depth − / + (0.25 m steps, −1.5…+1.0 m); never auto-locks to an enemy |
 | B | brace on cover within reach (not while moving or sprinting) |
-| 1 / 2 | equip the rifle / a deployable camera (left mouse then places it on the nearest floor, ceiling or cover) |
+| 1 / 2 / 3 | equip the primary / the sidearm / a deployable camera (left mouse then places it on the nearest floor, ceiling or cover) |
 | U | camera link on/off (an `updateConfig` mutation) |
 | V | developer view |
 | P / . | pause / step one tick |
@@ -339,6 +346,14 @@ scenario mid-mutation.
 | Textured, trimmed map and detailed soldiers; decoration never leaves collider bounds | verified | `tests/props.test.ts`; manual check in the browser |
 | Depth zones marked by in-world signs, wall tape and floor kerb; cyan labels developer-only | verified | `tests/props.test.ts`; manual check in the browser |
 | Depth haze makes FAR bodies hazier than the lane | partial | visual only, no automated test |
+
+### Prototype v0.2.5 (2DS-7)
+
+| Item | Result | Evidence |
+| --- | --- | --- |
+| Primary and sidearm carried together with separate magazines; slot swap refuses the wrong class | verified | `tests/weapons.test.ts` |
+| Barrel reach moves the mechanical muzzle; sway and recoil differ per weapon | verified | `tests/weapons.test.ts` |
+| Aiming a scoped weapon pans the view ahead in the facing direction; unscoped or unaimed does not | verified | `tests/weapons.test.ts`; manual check in the browser |
 
 ### GraphQL and application state
 

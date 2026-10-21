@@ -27,6 +27,7 @@ import type {
   SceneSeed,
 } from './types.ts';
 import { bounds, vec3 } from './types.ts';
+import { DEFAULT_LOADOUT, type Loadout } from './weapons.ts';
 
 export const MAP_ID = 'training-room-v1';
 
@@ -179,7 +180,7 @@ const opforCeilingCam = (): ReconCameraSeed => ({
   range: 11,
 });
 
-export function buildScene(entities: EntitySeed[], extra: { cameras?: ReconCameraSeed[]; deployableCameras?: number } = {}): SceneSeed {
+export function buildScene(entities: EntitySeed[], extra: { cameras?: ReconCameraSeed[]; deployableCameras?: number; loadout?: Loadout } = {}): SceneSeed {
   return {
     mapId: MAP_ID,
     colliders: buildColliders(),
@@ -189,6 +190,7 @@ export function buildScene(entities: EntitySeed[], extra: { cameras?: ReconCamer
     captureBounds,
     cameras: [cam01, ...(extra.cameras ?? [])],
     deployableCameras: extra.deployableCameras ?? 2,
+    loadout: { ...(extra.loadout ?? DEFAULT_LOADOUT) },
     roomMinX: ROOM_MIN_X,
     roomMaxX: ROOM_MAX_X,
     stationLabels: [
@@ -404,9 +406,19 @@ export const SCENARIOS: Scenario[] = [
     kind: 'CAMERA_WAR',
     title: '8. Camera war',
     description:
-      'Two deployable cameras in your inventory and an OPFOR camera on the ceiling. Deploy one onto the wall (2, then click), link it with U, and shoot the enemy camera. Every camera is a dynamic object: the opposition only learns of yours through its own view cones.',
+      'Two deployable cameras in your inventory and an OPFOR camera on the ceiling. Deploy one onto the wall (3, then click), link it with U, and shoot the enemy camera. Every camera is a dynamic object: the opposition only learns of yours through its own view cones.',
     seed: 108,
     initialScene: buildScene([player(-12.6, 1, 'STANDING'), enemyA()], { cameras: [opforCeilingCam()], deployableCameras: 2 }),
+    defaultConfig: withConfig({ cameraStatus: 'OFFLINE' }),
+  },
+  {
+    id: 'marksman',
+    kind: 'MARKSMAN',
+    title: '9. Marksman',
+    description:
+      'A DMR with a 4× scope as the primary and a pistol as the sidearm, carried together. Hold aim with the DMR: the scope pans your view further ahead. Press 2 for the pistol, 1 for the DMR again; each keeps its own magazine.',
+    seed: 109,
+    initialScene: buildScene([player(-18.0, 1, 'STANDING'), enemyA()], { loadout: { primary: 'DMR', sidearm: 'PISTOL' } }),
     defaultConfig: withConfig({ cameraStatus: 'OFFLINE' }),
   },
 ];

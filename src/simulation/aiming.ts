@@ -59,12 +59,14 @@ export interface AimSituation {
   braced: boolean;
   /** Going over an obstacle: no aim control until the body lands. */
   vaulting: boolean;
+  /** Equipped weapon's sway multiplier (WeaponSpec.sway); 1 when omitted. */
+  weaponSway?: number;
 }
 
 /** Situational amplitude before heat and settling (metres). */
 export function situationalAmplitude(base: number, s: AimSituation): { amplitude: number; label: string } {
   if (s.vaulting) return { amplitude: base * SWAY.vault, label: 'VAULTING' };
-  if (s.braced && !s.moving) return { amplitude: base * SWAY.bracedFactor, label: 'BRACED' };
+  if (s.braced && !s.moving) return { amplitude: base * SWAY.bracedFactor * (s.weaponSway ?? 1), label: 'BRACED' };
   let mult = SWAY.still;
   let label = 'STILL';
   if (s.moving) {
@@ -90,7 +92,7 @@ export function situationalAmplitude(base: number, s: AimSituation): { amplitude
     mult *= SWAY.aimFactor;
     label += ' / AIMING';
   }
-  return { amplitude: base * mult, label };
+  return { amplitude: base * mult * (s.weaponSway ?? 1), label };
 }
 
 export function updateAim(aim: AimState, dt: number, config: DemoConfig, s: AimSituation, justStopped: boolean): void {
@@ -143,6 +145,6 @@ export function setSelectedDepth(aim: AimState, depth: number): void {
   aim.selectedDepth = clamp(depth, SELECTED_DEPTH_MIN, SELECTED_DEPTH_MAX);
 }
 
-export function applyRecoil(aim: AimState): void {
-  aim.heat = Math.min(SWAY.heatMax, aim.heat + SWAY.heatPerShot);
+export function applyRecoil(aim: AimState, heatPerShot: number = SWAY.heatPerShot): void {
+  aim.heat = Math.min(SWAY.heatMax, aim.heat + heatPerShot);
 }

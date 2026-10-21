@@ -51,8 +51,8 @@ export function Help({ onClose }: { onClose: () => void }) {
               <td>Selected aim depth − / + (world Z, never auto-locked to an enemy)</td>
             </tr>
             <tr>
-              <td>1 / 2</td>
-              <td>Equip the rifle (1) or a deployable camera (2). With the camera equipped, left mouse places it on the floor, ceiling or cover nearest the pointer (within reach); it snaps to the surface and sits on the lane (depth 0)</td>
+              <td>1 / 2 / 3</td>
+              <td>Equip the primary (1), the sidearm (2) or a deployable camera (3). Primary and sidearm are carried together, each with its own magazine; R reloads the one in hand. A scoped weapon (DMR) pans the view further ahead in the facing direction while you aim. With the camera equipped, left mouse places it on the floor, ceiling or cover nearest the pointer (within reach); it snaps to the surface and sits on the lane (depth 0)</td>
             </tr>
             <tr>
               <td>U</td>

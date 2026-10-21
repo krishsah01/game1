@@ -13,6 +13,8 @@
  * Units: metres, seconds, degrees (FOV), cycles/second (sway frequency).
  */
 
+import type { Loadout } from './weapons.ts';
+
 export interface Vec3 {
   x: number;
   y: number;
@@ -33,7 +35,8 @@ export type ScenarioKind =
   | 'SMOKE_SOUND'
   | 'DEPTH_SHOT'
   | 'CONTROL_POINT'
-  | 'CAMERA_WAR';
+  | 'CAMERA_WAR'
+  | 'MARKSMAN';
 
 export type EntityKind = 'PLAYER' | 'ENEMY' | 'DROPPED_GEAR' | 'CAMERA';
 export type Team = 'FRIENDLY' | 'OPPOSING' | 'NEUTRAL';
@@ -116,6 +119,8 @@ export interface SceneSeed {
   cameras: ReconCameraSeed[];
   /** Deployable cameras in the player's inventory at the start of the preset. */
   deployableCameras: number;
+  /** Primary and sidearm the player starts with (both carried at once). */
+  loadout: Loadout;
   /** Horizontal extent of the room, used by the follow camera. */
   roomMinX: number;
   roomMaxX: number;

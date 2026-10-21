@@ -3,7 +3,7 @@
  * camera link and own-camera status records. Deliberately shows no enemy
  * positions, no visibility scores and no event log.
  */
-import { MAGAZINE_SIZE } from '../shared/tuning.ts';
+import { WEAPONS } from '../shared/weapons.ts';
 import type { Presentation } from '../simulation/world.ts';
 
 const COVER_LABEL: Record<string, string> = { none: '—', hidden: 'HIDDEN', observe: 'OBSERVE', aimOver: 'AIM OVER', peek: 'PEEK' };
@@ -25,7 +25,8 @@ export function Hud({ p }: { p: Presentation }) {
           {pl.cover.state === 'none' && pl.cover.depthCover && <span className="hud-v">DEPTH COVER · F peek</span>}
           {pl.braced && <span className="hud-v amber">BRACED</span>}
           {pl.cover.aiming && pl.cover.state === 'none' && <span className="hud-v accent">ADS</span>}
-          {!pl.cover.aiming && pl.equipped === 'RIFLE' && <span className="hud-v muted">LOW READY</span>}
+          {!pl.cover.aiming && pl.equipped !== 'CAMERA' && <span className="hud-v muted">LOW READY</span>}
+          {pl.scoped && pl.weapon.scope && <span className="hud-v accent">SCOPE {pl.weapon.scope.magnification}×</span>}
         </div>
         <div className="hud-row">
           <span className="hud-k">SPEED</span>
@@ -78,11 +79,16 @@ export function Hud({ p }: { p: Presentation }) {
       <div className="hud bottom-right">
         <div className="ammo">
           <span className="big">{pl.ammo}</span>
-          <span className="small">/ {MAGAZINE_SIZE}</span>
+          <span className="small">/ {pl.weapon.magazine}</span>
         </div>
         <div className="hud-row inventory">
-          <span className={`slot ${pl.equipped === 'RIFLE' ? 'on' : ''}`}>1 RIFLE</span>
-          <span className={`slot ${pl.equipped === 'CAMERA' ? 'on' : ''} ${pl.cameraCharges === 0 ? 'empty' : ''}`}>2 CAMERA ×{pl.cameraCharges}</span>
+          <span className={`slot ${pl.equipped === 'PRIMARY' ? 'on' : ''}`}>
+            1 {WEAPONS[pl.loadout.primary].label} {pl.magazines.PRIMARY}
+          </span>
+          <span className={`slot ${pl.equipped === 'SIDEARM' ? 'on' : ''}`}>
+            2 {WEAPONS[pl.loadout.sidearm].label} {pl.magazines.SIDEARM}
+          </span>
+          <span className={`slot ${pl.equipped === 'CAMERA' ? 'on' : ''} ${pl.cameraCharges === 0 ? 'empty' : ''}`}>3 CAMERA ×{pl.cameraCharges}</span>
         </div>
         {pl.placement && (
           <div className="hud-row">
@@ -113,7 +119,7 @@ export function Hud({ p }: { p: Presentation }) {
         <span>LMB fire (aiming only)</span>
         <span>Q/E aim depth</span>
         <span>B brace</span>
-        <span>1/2 rifle/camera</span>
+        <span>1/2/3 primary/sidearm/camera</span>
         <span>U cam link</span>
         <span>Tab speed</span>
         <span>V developer</span>
