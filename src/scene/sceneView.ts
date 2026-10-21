@@ -19,6 +19,7 @@ import {
   DoubleSide,
   EdgesGeometry,
   Float32BufferAttribute,
+  Fog,
   Group,
   HemisphereLight,
   Line,
@@ -46,6 +47,7 @@ import type { Bounds, CameraStatus, ColliderSeed, SceneSeed } from '../shared/ty
 import type { CameraRecord, EntityView, Presentation, ViewMode } from '../simulation/world.ts';
 import { fitOrthographic, followCenterX } from './cameraRig.ts';
 import { LabelLayer } from './labels.ts';
+import { backWallDressing, colliderTexture, colliderTrim, zoneSignage } from './props.ts';
 import { ENEMY_TINT, FRIENDLY_TINT, makeBag, makeBarrierGeometry, makeCameraDevice, orientCameraDevice, SoldierModel } from './models.ts';
 
 export interface FrameOptions {
@@ -63,6 +65,16 @@ const FOLLOW_LEAD = 0.42;
 const CYAN = 0x5fd3ff;
 const AMBER = 0xffb454;
 const DIM_TARGET = new Color(0x2c3035);
+/** Back-wall face and floor front face (rendering anchors for dressing and signage). */
+const BACK_WALL_FACE_Z = -3.0;
+const FLOOR_FRONT_Z = 1.75;
+/**
+ * Depth haze (v0.2.4). The camera sits at z = 30 looking down -Z, so fog
+ * distance is view depth: the front of the room is clear, the lane is barely
+ * touched and the back wall is noticeably hazier. Size never changes with
+ * depth (orthographic), so this tint is the main monocular depth cue.
+ */
+const HAZE = { color: 0x1b2026, near: 29.0, far: 40.0 };
 const OPFOR_RED = 0xff6a5a;
 const LED_COLOR: Record<CameraStatus, number> = { ONLINE: 0x33ffcc, JAMMED: 0xffaa33, OFFLINE: 0xff3344, DESTROYED: 0x331111 };
 
@@ -92,8 +104,12 @@ function disposeObject(obj: Object3D): void {
     const m = o as Mesh;
     if (m.geometry) m.geometry.dispose();
     const mat = m.material as Material | Material[] | undefined;
-    if (Array.isArray(mat)) mat.forEach((x) => x.dispose());
-    else mat?.dispose();
+    const release = (x: Material) => {
+      (x as MeshStandardMaterial).map?.dispose();
+      x.dispose();
+    };
+    if (Array.isArray(mat)) mat.forEach(release);
+    else if (mat) release(mat);
   });
 }
 
@@ -152,6 +168,7 @@ export class SceneView {
     this.renderer.toneMapping = ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
     this.scene.background = new Color(0x15181b);
+    this.scene.fog = new Fog(HAZE.color, HAZE.near, HAZE.far);
     this.labels = new LabelLayer(labelRoot);
 
     this.scene.add(this.staticGroup, this.decorGroup, this.dynamicGroup, this.overlayGroup, this.smokeGroup, this.colliderWire, this.zoneGroup);
@@ -302,7 +319,7 @@ export class SceneView {
         geometry = new BoxGeometry(b.size.x, b.size.y, b.size.z);
         color = 0x55575a;
     }
-    const material = new MeshStandardMaterial({ color, roughness: 0.92, metalness: 0.02 });
+    const material = new MeshStandardMaterial({ color, roughness: 0.92, metalness: 0.02, map: colliderTexture(c) });
     if (translucent) {
       material.transparent = true;
       material.opacity = 0.42;
@@ -328,6 +345,7 @@ export class SceneView {
       this.staticGroup.add(screen);
       this.terminalScreen = screenMat;
     }
+    for (const trim of colliderTrim(c)) this.decorGroup.add(trim);
     const base = new Color(color);
     const dim = base.clone().multiplyScalar(0.55).lerp(DIM_TARGET, 0.45);
     this.statics.push({ id: c.id, mesh, base, dim, lit: 1, materials });
@@ -366,6 +384,9 @@ export class SceneView {
       light.position.set(x, 4.3, -0.8);
       mark(light);
     }
+    for (const o of backWallDressing(seed.roomMinX, seed.roomMaxX, BACK_WALL_FACE_Z)) this.decorGroup.add(o);
+    // In-world signage marking every depth zone (the player-view replacement for the zone labels).
+    for (const z of seed.depthZones) this.decorGroup.add(zoneSignage(z, BACK_WALL_FACE_Z, FLOOR_FRONT_Z));
     // Wall stripe (paint band) for readability.
     const stripe = new Mesh(new BoxGeometry(span, 0.12, 0.02), new MeshStandardMaterial({ color: 0x6d7266, roughness: 1 }));
     stripe.position.set(mid, 1.25, -2.99);
@@ -388,6 +409,7 @@ export class SceneView {
       const band = new Mesh(new BoxGeometry(b.size.x, 0.05, b.size.z), new MeshBasicMaterial({ color: CYAN, transparent: true, opacity: 0.35, depthWrite: false }));
       band.position.set(b.center.x, 0.03, b.center.z);
       band.userData.decorative = true;
+      band.userData.dev = true;
       this.zoneGroup.add(band);
       const wire = new LineSegments(new EdgesGeometry(new BoxGeometry(b.size.x, b.size.y, b.size.z)), new LineBasicMaterial({ color: CYAN, transparent: true, opacity: 0.35 }));
       wire.position.set(b.center.x, b.center.y, b.center.z);
@@ -669,6 +691,8 @@ export class SceneView {
       if (child.userData.dev) child.visible = dev && opts.showZones;
       else child.visible = opts.showZones || !dev;
     }
+    // Player view reads depth zones from the in-world signage; the cyan labels are a developer overlay.
+    this.labels.setHidden('zone-', !(dev && opts.showZones));
     if (dev) this.updateDevOverlays(p, opts);
 
     this.renderer.render(this.scene, this.camera);

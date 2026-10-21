@@ -109,6 +109,13 @@ presentations of the same simulation.
 - **No shooting without aiming.** Left mouse from low ready is refused (`LOW READY · hold right mouse to aim`, no ammo spent). Sprinting cannot aim, so it cannot fire either. The developer *Test firing line* still probes the current muzzle without aiming. The inspector has a *Hold aim* latch so its Fire button keeps working without a mouse.
 - **Observe, then aim to raise the gun.** Behind waist-high cover, `F` observes with the rifle still at low ready below the top. Holding aim on top of that raises the rifle over the cover (aim-over): the body rises a little more, so more of it is exposed, but the muzzle clears the top and the shot can reach the target. Releasing aim drops back to observe. Hidden, peek and vault keep low ready.
 
+### New in prototype v0.2.4 (Linear 2DS-6)
+
+- **Higher-fidelity map.** Procedural canvas textures (cast concrete, steel wall panels, corrugated floor plate, stencilled ammunition crates) on every gameplay collider, plus decorative trim that never leaves its collider's bounds (low-wall caps and footings, steel edge posts on partitions and jambs, crate battens, locker vents, shelf boards) and back-wall dressing (kick plate, vents, conduit boxes, an extinguisher). The front ceiling beam is gone so ceiling cameras at z = 0 stay readable. Code: `src/scene/textures.ts`, `src/scene/props.ts`.
+- **Higher-fidelity soldiers.** Two-bone arms with elbows and gloves, neck, goggles and NVG mount, chest pouches, back pack, belt, knee pads, boot soles, a rifle with handguard, optic and muzzle device, and a team marker band on the upper arm (blue friendly, red OPFOR). The mechanical anchors are unchanged: the rifle tip is still the muzzle.
+- **Depth perception.** The camera is orthographic and exactly side-on, so size never changes with depth and the floor is edge-on. The cue that works is **depth haze**: fog over view depth leaves the front clear, barely touches the lane and makes FAR bodies and the back wall progressively hazier (`HAZE` in `sceneView.ts`). The busier back wall also catches clearer shadows.
+- **Lore-friendly depth-zone signs.** Each depth zone is marked in the world rather than with a floating label: a yellow/black facility sign on the back wall (`SERVICE DOOR B2`, `LOADING RECESS C1`, `CONTROL BAY A`, with a step-into-the-recess pictogram), hazard tape up the wall at both ends of the zone, and a hazard-painted kerb along the floor's front edge under it. The cyan zone labels and floor bands are now developer overlays only.
+
 Mechanics (all in plain TypeScript under `src/simulation/`, independent of
 React and Three.js):
 
@@ -324,6 +331,14 @@ scenario mid-mutation.
 | Without aim the rifle rests at low ready (muzzle toward the ground) whatever the pointer does; with aim it points at the pointer | verified | `tests/aim-ready.test.ts`, `tests/stance-vault.test.ts` |
 | Firing requires aiming: refused from low ready (no ammo spent) and while sprinting; inspector latch counts as aiming | verified | `tests/aim-ready.test.ts` |
 | Observe keeps the rifle low; observe + aim raises it over cover (taller, more exposed, shot reaches the target) | verified | `tests/aim-ready.test.ts` |
+
+### Prototype v0.2.4 (2DS-6)
+
+| Item | Result | Evidence |
+| --- | --- | --- |
+| Textured, trimmed map and detailed soldiers; decoration never leaves collider bounds | verified | `tests/props.test.ts`; manual check in the browser |
+| Depth zones marked by in-world signs, wall tape and floor kerb; cyan labels developer-only | verified | `tests/props.test.ts`; manual check in the browser |
+| Depth haze makes FAR bodies hazier than the lane | partial | visual only, no automated test |
 
 ### GraphQL and application state
 

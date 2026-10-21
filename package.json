@@ -1,7 +1,7 @@
 {
   "name": "milsim-concept-lab",
   "private": true,
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Side-scroller milsim concept demonstrator: fixed perpendicular camera, head-origin visibility, cover states, recon intel and depth-sway aiming. Three.js renderer + local GraphQL scenario API.",
   "type": "module",
   "scripts": {
