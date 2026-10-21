@@ -42,11 +42,11 @@ import {
 } from 'three';
 import { aabbFromBounds } from '../shared/geometry.ts';
 import { ANCHORS, depthWord, LANE_HALF_WIDTH } from '../shared/tuning.ts';
-import type { Bounds, ColliderSeed, SceneSeed } from '../shared/types.ts';
-import type { EntityView, Presentation, ViewMode } from '../simulation/world.ts';
+import type { Bounds, CameraStatus, ColliderSeed, SceneSeed } from '../shared/types.ts';
+import type { CameraRecord, EntityView, Presentation, ViewMode } from '../simulation/world.ts';
 import { fitOrthographic, followCenterX } from './cameraRig.ts';
 import { LabelLayer } from './labels.ts';
-import { ENEMY_TINT, FRIENDLY_TINT, makeBag, makeBarrierGeometry, makeCameraDevice, SoldierModel } from './models.ts';
+import { ENEMY_TINT, FRIENDLY_TINT, makeBag, makeBarrierGeometry, makeCameraDevice, orientCameraDevice, SoldierModel } from './models.ts';
 
 export interface FrameOptions {
   mode: ViewMode;
@@ -63,6 +63,8 @@ const FOLLOW_LEAD = 0.42;
 const CYAN = 0x5fd3ff;
 const AMBER = 0xffb454;
 const DIM_TARGET = new Color(0x2c3035);
+const OPFOR_RED = 0xff6a5a;
+const LED_COLOR: Record<CameraStatus, number> = { ONLINE: 0x33ffcc, JAMMED: 0xffaa33, OFFLINE: 0xff3344, DESTROYED: 0x331111 };
 
 interface StaticEntry {
   id: string;
@@ -109,8 +111,8 @@ export class SceneView {
   private statics: StaticEntry[] = [];
   private actors = new Map<string, ActorEntry>();
   private player: SoldierModel;
-  private cameraDevice: Group;
-  private cameraLed: Mesh | null = null;
+  /** Translucent preview of where LMB would place a camera. */
+  private placementGhost: Group;
   private terminalScreen: MeshStandardMaterial | null = null;
   private smokeGroup = new Group();
   private smokeMaterials: MeshStandardMaterial[] = [];
@@ -122,7 +124,10 @@ export class SceneView {
   private fireLine: Line;
   private fireHit: Mesh;
   private playerCone: Mesh;
-  private cameraCone: Mesh;
+  /** One explanatory cone per live camera (developer view). */
+  private cameraCones = new Map<string, Mesh>();
+  /** Flat view fans of opposing actors (developer view). */
+  private opforFans: Mesh[] = [];
   private colliderWire = new Group();
   private zoneGroup = new Group();
   private captureWire: LineSegments | null = null;
@@ -170,9 +175,17 @@ export class SceneView {
 
     this.player = new SoldierModel(FRIENDLY_TINT);
     this.dynamicGroup.add(this.player.group);
-    this.cameraDevice = makeCameraDevice();
-    this.cameraLed = this.cameraDevice.getObjectByName('led') as Mesh | null;
-    this.dynamicGroup.add(this.cameraDevice);
+    this.placementGhost = makeCameraDevice(0x5fd3ff);
+    this.placementGhost.traverse((o) => {
+      const m = (o as Mesh).material as MeshStandardMaterial | undefined;
+      if (m) {
+        m.transparent = true;
+        m.opacity = 0.55;
+        m.depthWrite = false;
+      }
+    });
+    this.placementGhost.visible = false;
+    this.dynamicGroup.add(this.placementGhost);
 
     // Overlay primitives.
     this.eyeMarker = new Mesh(new SphereGeometry(0.06, 10, 10), new MeshBasicMaterial({ color: CYAN }));
@@ -181,8 +194,7 @@ export class SceneView {
     this.fireLine = new Line(new BufferGeometry(), new LineBasicMaterial({ color: AMBER, transparent: true, opacity: 0.9 }));
     this.fireHit = new Mesh(new SphereGeometry(0.07, 10, 10), new MeshBasicMaterial({ color: AMBER }));
     this.playerCone = new Mesh(new BufferGeometry(), new MeshBasicMaterial({ color: CYAN, transparent: true, opacity: 0.07, side: DoubleSide, depthWrite: false }));
-    this.cameraCone = new Mesh(new BufferGeometry(), new MeshBasicMaterial({ color: 0x7fe7d8, wireframe: true, transparent: true, opacity: 0.35, depthWrite: false }));
-    this.overlayGroup.add(this.eyeMarker, this.muzzleMarker, this.sightLines, this.fireLine, this.fireHit, this.playerCone, this.cameraCone);
+    this.overlayGroup.add(this.eyeMarker, this.muzzleMarker, this.sightLines, this.fireLine, this.fireHit, this.playerCone);
     for (let i = 0; i < 8; i++) {
       const line = new Line(new BufferGeometry(), new LineBasicMaterial({ color: 0xffd18a, transparent: true, opacity: 0 }));
       line.visible = false;
@@ -222,13 +234,11 @@ export class SceneView {
     this.player.snapPose(ANCHORS.standing);
     const playerSeed = seed.entities.find((e) => e.kind === 'PLAYER');
     this.followX = followCenterX(playerSeed?.position.x ?? 0, seed.roomMinX, seed.roomMaxX, this.halfWidth());
-
-    // Camera device orientation: lens (-X local) toward lookAt in XZ.
-    const r = seed.recon;
-    const dir = new Vector3(r.lookAt.x - r.position.x, 0, r.lookAt.z - r.position.z).normalize();
-    this.cameraDevice.position.set(r.position.x, r.position.y - 0.1, r.position.z);
-    this.cameraDevice.rotation.set(0, Math.atan2(dir.z, -dir.x), 0);
-    this.buildCameraCone(seed);
+    for (const cone of this.cameraCones.values()) {
+      this.overlayGroup.remove(cone);
+      disposeObject(cone);
+    }
+    this.cameraCones.clear();
 
     for (const s of seed.stationLabels) this.labels.upsert(`station-${s.id}`, 'station', s.label, { x: s.x, y: 4.55, z: 0 });
   }
@@ -335,8 +345,8 @@ export class SceneView {
     };
     const span = seed.roomMaxX - seed.roomMinX;
     const mid = (seed.roomMinX + seed.roomMaxX) / 2;
-    // Ceiling beams.
-    for (const z of [-2.2, -0.6, 1.0]) {
+    // Ceiling beams. None in front of the lane plane: ceiling cameras hang at z = 0 and must stay readable.
+    for (const z of [-2.2, -0.6]) {
       const beam = new Mesh(new BoxGeometry(span, 0.22, 0.22), new MeshStandardMaterial({ color: 0x2a2d30, roughness: 0.9 }));
       beam.position.set(mid, 4.86, z);
       beam.castShadow = true;
@@ -417,17 +427,23 @@ export class SceneView {
     this.smokeGroup.visible = false;
   }
 
-  private buildCameraCone(seed: SceneSeed): void {
-    const r = seed.recon;
-    const len = r.range * 0.55;
-    const radius = Math.tan((r.fovDegrees * Math.PI) / 360) * len;
-    const geo = new ConeGeometry(radius, len, 4, 1, true);
-    geo.rotateX(-Math.PI / 2); // axis along -Z ... then orient below
-    geo.translate(0, 0, -len / 2);
-    this.cameraCone.geometry.dispose();
-    this.cameraCone.geometry = geo;
-    this.cameraCone.position.set(r.position.x, r.position.y, r.position.z);
-    this.cameraCone.lookAt(r.lookAt.x, r.lookAt.y, r.lookAt.z);
+  /** Explanatory wire cone for one camera (created once per camera id). */
+  private cameraCone(c: CameraRecord): Mesh {
+    let cone = this.cameraCones.get(c.id);
+    if (!cone) {
+      const len = c.range * 0.55;
+      const radius = Math.tan((c.fovDegrees * Math.PI) / 360) * len;
+      const geo = new ConeGeometry(radius, len, 4, 1, true);
+      geo.rotateX(-Math.PI / 2); // apex toward -Z, base toward +Z
+      geo.translate(0, 0, len / 2); // apex at the lens, base `len` ahead along +Z
+      cone = new Mesh(geo, new MeshBasicMaterial({ color: c.team === 'FRIENDLY' ? 0x7fe7d8 : OPFOR_RED, wireframe: true, transparent: true, opacity: 0.35, depthWrite: false }));
+      cone.position.set(c.position.x, c.position.y, c.position.z);
+      // Object3D.lookAt points local +Z (the cone's opening) along the camera's facing.
+      cone.lookAt(c.position.x + c.facing.x, c.position.y + c.facing.y, c.position.z + c.facing.z);
+      this.overlayGroup.add(cone);
+      this.cameraCones.set(c.id, cone);
+    }
+    return cone;
   }
 
   // ------------------------------------------------------------------ frame
@@ -521,6 +537,22 @@ export class SceneView {
           }
         });
       }
+      if (e.device) {
+        const group = entry.object as Group;
+        orientCameraDevice(group, e.device.facing, e.device.mountNormal);
+        const led = group.getObjectByName('led') as Mesh | undefined;
+        if (led) {
+          const m = led.material as MeshStandardMaterial;
+          m.emissive.set(LED_COLOR[e.device.status]);
+          m.color.copy(m.emissive);
+        }
+        // A destroyed device droops on its bracket.
+        const head = group.getObjectByName('head');
+        if (head && e.device.status === 'DESTROYED') head.rotation.z += 0.6;
+        const statusLabel = e.device.status === 'ONLINE' ? 'LIVE' : e.device.status;
+        this.labels.upsert(`camtag-${e.id}`, `camtag ${e.device.status.toLowerCase()} ${e.team.toLowerCase()}`, `${e.label} / ${statusLabel}`, { x: e.position.x, y: e.position.y + e.height, z: e.position.z });
+        keepLabels.add(`camtag-${e.id}`);
+      }
       if (entry.marker) entry.marker.visible = e.observed && e.kind === 'ENEMY';
       if (entry.marker) entry.marker.position.y = e.height + 0.28;
       if (Math.abs(e.position.z) > LANE_HALF_WIDTH && e.observed) {
@@ -528,7 +560,7 @@ export class SceneView {
         keepLabels.add(`depth-${e.id}`);
       }
       if (dev && e.observed) {
-        const src = e.sources.map((s) => (s === 'player' ? 'DIRECT' : s === p.camera.id ? p.camera.label : s.toUpperCase())).join(' + ');
+        const src = e.sources.map((s) => (s === 'player' ? 'DIRECT' : (p.cameras.find((c) => c.id === s)?.label ?? s.toUpperCase()))).join(' + ');
         this.labels.upsert(`src-${e.id}`, 'source', src, { x: e.position.x, y: e.height + 0.5, z: e.position.z });
         keepLabels.add(`src-${e.id}`);
       }
@@ -560,19 +592,21 @@ export class SceneView {
     }
     this.labels.prune('depth-', keepLabels);
     this.labels.prune('src-', keepLabels);
+    this.labels.prune('camtag-', keepLabels);
 
-    // Camera device + tag.
-    const camVisible = p.camera.deviceObserved || dev;
-    this.cameraDevice.visible = camVisible;
-    if (this.cameraLed) {
-      const led = this.cameraLed.material as MeshStandardMaterial;
-      led.emissive.set(p.camera.status === 'ONLINE' ? 0x33ffcc : p.camera.status === 'JAMMED' ? 0xffaa33 : 0xff3344);
-      led.color.copy(led.emissive);
-    }
-    if (camVisible) {
-      this.labels.upsert('cam-tag', `camtag ${p.camera.status.toLowerCase()}`, `${p.camera.label} / ${p.camera.statusLabel}`, { x: p.camera.position.x, y: p.camera.position.y + 0.4, z: p.camera.position.z });
-      keepLabels.add('cam-tag');
-    } else this.labels.remove('cam-tag');
+    // Camera placement preview (camera slot equipped).
+    const placement = pl.placement;
+    this.placementGhost.visible = placement !== null && placement.position !== null;
+    if (placement?.position && placement.normal) {
+      this.placementGhost.position.set(placement.position.x, placement.position.y, placement.position.z);
+      const h = Math.abs(placement.normal.x) > 0.5 ? Math.sign(placement.normal.x) : pl.facingX;
+      orientCameraDevice(this.placementGhost, { x: h, y: placement.normal.y < 0 ? -0.6 : 0.1 }, placement.normal);
+      this.placementGhost.traverse((o) => {
+        const m = (o as Mesh).material as MeshStandardMaterial | undefined;
+        if (m) m.color.set(placement.ok ? CYAN : OPFOR_RED);
+      });
+      this.labels.upsert('placement', `placement ${placement.ok ? 'ok' : 'refused'}`, placement.ok ? `PLACE · ${placement.mount}` : 'CANNOT PLACE', { x: placement.position.x, y: placement.position.y + 0.32, z: placement.position.z });
+    } else this.labels.remove('placement');
 
     // Terminal readout.
     if (this.terminalScreen) {
@@ -622,7 +656,7 @@ export class SceneView {
       (line.material as LineBasicMaterial).opacity = k * (t.tracer.test ? 0.5 : 0.95);
       (line.material as LineBasicMaterial).color.set(t.tracer.test ? 0x9fd9ff : 0xffd18a);
       line.visible = true;
-      const showImpact = t.tracer.hitKind === 'collider' || (t.tracer.hitKind === 'actor' && (t.tracer.hitObserved || dev));
+      const showImpact = t.tracer.hitKind === 'collider' || ((t.tracer.hitKind === 'actor' || t.tracer.hitKind === 'device') && (t.tracer.hitObserved || dev));
       impact.visible = showImpact && t.age < 0.3;
       impact.position.set(end.x, end.y, end.z);
       (impact.material as MeshBasicMaterial).opacity = Math.max(0, 1 - t.age / 0.3);
@@ -651,6 +685,8 @@ export class SceneView {
       marker.position.y = 2.05;
       soldier.group.add(marker);
       entry = { kind: e.kind, object: soldier.group, soldier, marker, lastSeenFrame: 0, fadeStart: null, frozenAt: new Vector3(), wasObserved: false };
+    } else if (e.kind === 'CAMERA') {
+      entry = { kind: e.kind, object: makeCameraDevice(e.team === 'FRIENDLY' ? 0x33363a : 0x4a2a28), soldier: null, marker: null, lastSeenFrame: 0, fadeStart: null, frozenAt: new Vector3(), wasObserved: false };
     } else {
       entry = { kind: e.kind, object: makeBag(), soldier: null, marker: null, lastSeenFrame: 0, fadeStart: null, frozenAt: new Vector3(), wasObserved: false };
     }
@@ -687,14 +723,25 @@ export class SceneView {
           pushSeg(eye.x, eye.y, eye.z, eye.x + (s.point.x - eye.x) * t, eye.y + (s.point.y - eye.y) * t, eye.z + (s.point.z - eye.z) * t, s.reason === 'clear' ? cClear : s.reason === 'smoke' ? cSmoke : cBlocked);
         }
       }
-      const cam = p.camera;
-      for (const obs of d.cameraSight) {
-        for (const s of obs.samples) {
-          if (s.reason === 'fov' || s.reason === 'range') continue;
-          const t = s.reason === 'clear' ? 1 : s.clipT;
-          pushSeg(cam.position.x, cam.position.y, cam.position.z, cam.position.x + (s.point.x - cam.position.x) * t, cam.position.y + (s.point.y - cam.position.y) * t, cam.position.z + (s.point.z - cam.position.z) * t, s.reason === 'clear' ? cCamClear : s.reason === 'smoke' ? cSmoke : cCamBlocked);
+      const rays = (sight: typeof d.cameraSight, observers: typeof d.observers, clear: Color, blocked: Color) => {
+        for (const obs of sight) {
+          const o = observers.find((x) => x.id === obs.observerId)?.origin;
+          if (!o) continue;
+          for (const s of obs.samples) {
+            if (s.reason === 'fov' || s.reason === 'range') continue;
+            const t = s.reason === 'clear' ? 1 : s.clipT;
+            pushSeg(o.x, o.y, o.z, o.x + (s.point.x - o.x) * t, o.y + (s.point.y - o.y) * t, o.z + (s.point.z - o.z) * t, s.reason === 'clear' ? clear : s.reason === 'smoke' ? cSmoke : blocked);
+          }
         }
-      }
+      };
+      rays(d.cameraSight, d.observers, cCamClear, cCamBlocked);
+      // What the opposition sees of you and your cameras (clear rays only, to keep the overlay readable).
+      rays(
+        d.opforSight.map((o) => ({ ...o, samples: o.samples.filter((s) => s.reason === 'clear') })),
+        d.opforObservers,
+        new Color(OPFOR_RED),
+        new Color(OPFOR_RED),
+      );
     }
     this.sightLines.geometry.dispose();
     const g = new BufferGeometry();
@@ -733,7 +780,33 @@ export class SceneView {
       this.playerCone.geometry = new ShapeGeometry(shape);
       this.playerCone.position.set(eye.x, eye.y, eye.z);
     }
-    this.cameraCone.visible = opts.showCones && p.camera.status === 'ONLINE';
+    for (const cone of this.cameraCones.values()) cone.visible = false;
+    for (const c of p.cameras) this.cameraCone(c).visible = opts.showCones && c.status === 'ONLINE';
+
+    // Opposing actors' view fans (cameras already have cones).
+    const actorEyes = d.opforObservers.filter((o) => !p.cameras.some((c) => c.id === o.id));
+    while (this.opforFans.length < actorEyes.length) {
+      const fan = new Mesh(new BufferGeometry(), new MeshBasicMaterial({ color: OPFOR_RED, transparent: true, opacity: 0.06, side: DoubleSide, depthWrite: false }));
+      this.overlayGroup.add(fan);
+      this.opforFans.push(fan);
+    }
+    this.opforFans.forEach((fan, i) => {
+      const o = actorEyes[i];
+      fan.visible = opts.showCones && o !== undefined;
+      if (!o || !fan.visible) return;
+      const radius = Math.min(o.range, 7.5);
+      const half = (o.fovDegrees * Math.PI) / 360;
+      const shape = new Shape();
+      shape.moveTo(0, 0);
+      for (let k = 0; k <= 24; k++) {
+        const a = -half + (2 * half * k) / 24;
+        shape.lineTo(Math.cos(a) * radius * Math.sign(o.facing.x || 1), Math.sin(a) * radius);
+      }
+      shape.closePath();
+      fan.geometry.dispose();
+      fan.geometry = new ShapeGeometry(shape);
+      fan.position.set(o.origin.x, o.origin.y, o.origin.z);
+    });
   }
 
   dispose(): void {
@@ -746,7 +819,7 @@ export class SceneView {
     for (const entry of this.actors.values()) entry.soldier ? entry.soldier.dispose() : disposeObject(entry.object);
     this.actors.clear();
     this.player.dispose();
-    disposeObject(this.cameraDevice);
+    disposeObject(this.placementGhost);
     disposeObject(this.overlayGroup);
     for (const l of this.tracerPool) disposeObject(l);
     for (const m of this.impactPool) disposeObject(m);

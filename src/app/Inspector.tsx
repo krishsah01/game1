@@ -200,7 +200,7 @@ export function Inspector({ controller, state, p, mode, devOptions, onDevOptions
         )}
         {p && (
           <p className="small muted">
-            Observed now: {p.entities.filter((e) => e.observed).map((e) => `${e.label}${dev ? ` (${e.sources.map((s) => (s === 'player' ? 'DIRECT' : s === p.camera.id ? p.camera.label : s.toUpperCase())).join('+')})` : ''}`).join(', ') || 'nothing dynamic'}
+            Observed now: {p.entities.filter((e) => e.observed).map((e) => `${e.label}${dev ? ` (${e.sources.map((s) => (s === 'player' ? 'DIRECT' : (p.cameras.find((c) => c.id === s)?.label ?? s.toUpperCase()))).join('+')})` : ''}`).join(', ') || 'nothing dynamic'}
           </p>
         )}
         {dev && p?.dev && (
@@ -217,15 +217,45 @@ export function Inspector({ controller, state, p, mode, devOptions, onDevOptions
         )}
       </Section>
 
-      <Section title="Camera (CAM 01)">
+      <Section title="Cameras">
         <div className="btn-row">
+          <span className="muted small">Friendly link (U):</span>
           {(['ONLINE', 'JAMMED', 'DESTROYED', 'OFFLINE'] as CameraStatus[]).map((s) => (
             <button key={s} className={cfg?.cameraStatus === s ? 'on' : ''} disabled={!cfg} onClick={() => patch({ cameraStatus: s })}>
               {s}
             </button>
           ))}
         </div>
-        <p className="small muted">Link status is player-owned UI. The device mesh is drawn only when it is actually observed.</p>
+        <div className="btn-row">
+          <span className="muted small">Inventory:</span>
+          <button className={pl?.equipped === 'RIFLE' ? 'on' : ''} onClick={() => cmd({ type: 'equip', slot: 'RIFLE' })}>
+            1 Rifle
+          </button>
+          <button className={pl?.equipped === 'CAMERA' ? 'on' : ''} disabled={!pl || pl.cameraCharges === 0} onClick={() => cmd({ type: 'equip', slot: 'CAMERA' })}>
+            2 Camera ×{pl?.cameraCharges ?? 0}
+          </button>
+        </div>
+        {p && (
+          <table className="kv">
+            <tbody>
+              {p.cameras.map((c) => (
+                <tr key={c.id}>
+                  <td>
+                    {c.label} {c.team === 'OPPOSING' ? '(OPFOR)' : c.deployed ? '(deployed)' : ''}
+                  </td>
+                  <td>
+                    {c.statusLabel} · {c.mount}
+                    {dev && ` · x ${c.position.x.toFixed(1)} y ${c.position.y.toFixed(1)}`}
+                    {dev && c.team === 'FRIENDLY' && ` · ${c.spottedBy.length ? `SPOTTED by ${c.spottedBy.join('+')}` : 'unseen by OPFOR'}`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <p className="small muted">
+          Link status is player-owned UI. Every device, yours or theirs, is drawn only while it is actually observed, sits at depth 0 and can be shot. The opposition learns of your cameras only through its own view cones (developer view shows who has spotted them).
+        </p>
       </Section>
 
       <Section title="Smoke and noise">

@@ -326,20 +326,42 @@ export function makeBag(): Group {
   return g;
 }
 
-/** Wall-mounted recon camera. */
-export function makeCameraDevice(): Group {
+/**
+ * Recon camera: a bracket fixed to its surface and a head whose lens (local
+ * -X) points along the camera's facing. Call `orientCameraDevice` to aim it.
+ */
+export function makeCameraDevice(tint = 0x33363a): Group {
   const g = new Group();
-  const bracket = new Mesh(new BoxGeometry(0.08, 0.3, 0.08), std(0x2a2c2e));
-  bracket.position.y = 0.1;
-  const body = new Mesh(new BoxGeometry(0.32, 0.14, 0.14), std(0x33363a));
+  const bracket = new Mesh(new BoxGeometry(0.06, 0.14, 0.06), std(0x2a2c2e));
+  bracket.name = 'bracket';
+  const head = new Group();
+  head.name = 'head';
+  const body = new Mesh(new BoxGeometry(0.3, 0.13, 0.14), std(tint));
+  body.castShadow = true;
   const lens = new Mesh(new CylinderGeometry(0.05, 0.06, 0.08, 10), std(0x111416, { metalness: 0.3, roughness: 0.4 }));
   lens.rotation.z = Math.PI / 2;
-  lens.position.x = -0.19;
+  lens.position.x = -0.18;
   const led = new Mesh(new SphereGeometry(0.025, 8, 8), new MeshStandardMaterial({ color: 0x55ffcc, emissive: 0x33ffcc, emissiveIntensity: 2 }));
-  led.position.set(0.1, 0.09, 0.06);
+  led.position.set(0.09, 0.08, 0.06);
   led.name = 'led';
-  g.add(bracket, body, lens, led);
+  head.add(body, lens, led);
+  g.add(bracket, head);
   return g;
+}
+
+/** Points the head along `facing` (X/Y plane) and runs the bracket from the head to the mount surface. */
+export function orientCameraDevice(g: Group, facing: { x: number; y: number }, mountNormal: { x: number; y: number }): void {
+  const head = g.getObjectByName('head');
+  const bracket = g.getObjectByName('bracket');
+  if (head) {
+    const pitch = Math.atan2(facing.y, Math.abs(facing.x));
+    head.rotation.set(0, facing.x > 0 ? Math.PI : 0, -pitch);
+  }
+  if (bracket) {
+    // Bracket centre halfway to the surface, long axis along the normal.
+    bracket.position.set(-mountNormal.x * 0.09, -mountNormal.y * 0.09, 0);
+    bracket.rotation.set(0, 0, Math.abs(mountNormal.x) > 0.5 ? Math.PI / 2 : 0);
+  }
 }
 
 /** Jersey barrier profile (cross-section in the YZ plane) extruded along X. */

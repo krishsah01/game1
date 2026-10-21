@@ -285,6 +285,18 @@ code {
   color: var(--amber);
   border-color: rgba(255, 180, 84, 0.6);
 }
+.wlabel.placement {
+  font-size: 9px;
+  padding: 1px 4px;
+  border: 1px solid currentColor;
+  background: rgba(16, 19, 22, 0.7);
+}
+.wlabel.placement.ok {
+  color: var(--cyan);
+}
+.wlabel.placement.refused {
+  color: var(--red);
+}
 .wlabel.terminal {
   color: #9fc7ff;
   border: 1px solid rgba(95, 170, 255, 0.5);
@@ -428,6 +440,25 @@ code {
 .ammo .small {
   color: var(--muted);
   margin-left: 4px;
+}
+.inventory {
+  gap: 6px;
+  justify-content: flex-end;
+}
+.inventory .slot {
+  padding: 1px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: var(--muted);
+}
+.inventory .slot.on {
+  border-color: var(--cyan);
+  color: var(--text);
+}
+.inventory .slot.empty {
+  opacity: 0.45;
+}
+.wlabel.camtag.opposing {
+  color: #ff9a8a;
 }
 .legend {
   display: flex;

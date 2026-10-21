@@ -14,6 +14,9 @@ export interface HeldInput {
 
 export const emptyHeld = (): HeldInput => ({ moveX: 0, observe: false, aim: false, pointerWorld: null });
 
+/** Inventory slots: 1 = rifle, 2 = deployable camera. */
+export type EquipSlot = 'RIFLE' | 'CAMERA';
+
 export type CoverIntent = 'hidden' | 'observe' | 'aimOver' | null;
 
 /**
@@ -28,7 +31,11 @@ export type Command =
   | { type: 'setStance'; stance: Stance }
   | { type: 'setMoveMode'; mode: MoveMode }
   | { type: 'cycleMoveMode' }
+  /** LMB: fires the rifle, or places a camera when the camera slot is equipped. */
   | { type: 'fire' }
+  | { type: 'equip'; slot: EquipSlot }
+  /** Place a camera at the snap surface nearest `at` (defaults to the pointer). */
+  | { type: 'deployCamera'; at?: { x: number; y: number } }
   | { type: 'testFiringLine' }
   | { type: 'reload' }
   /** Depth move (W = FAR, S = LANE). Only honoured inside a depth zone. */

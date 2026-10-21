@@ -12,7 +12,8 @@ describe('visibility and knowledge separation', () => {
     expect(player.entities).toHaveLength(0);
     expect(player.dev).toBeNull();
     const dev = w.snapshot('developer');
-    expect(dev.entities.map((e) => e.id).sort()).toEqual(['enemy-b', 'gear-b']);
+    // Camera devices are dynamic entities too (developer view lists them; player view only when observed).
+    expect(dev.entities.map((e) => e.id).sort()).toEqual(['cam-01', 'enemy-b', 'gear-b']);
     expect(dev.dev?.rawTruth.find((t) => t.id === 'enemy-b')?.observed).toBe(false);
     // Static architecture is still present in the seed and lit values exist for every collider.
     expect(player.staticLit.size).toBe(w.scene.colliders.length);

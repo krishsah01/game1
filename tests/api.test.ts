@@ -30,7 +30,8 @@ describe('GraphQL contract', () => {
     const s = r.data!.scenario;
     expect(s.initialScene.colliders.length).toBeGreaterThan(10);
     expect(s.initialScene.entities.find((e: any) => e.id === 'enemy-c')).toMatchObject({ kind: 'ENEMY', facingX: -1, script: 'STATIC' });
-    expect(s.initialScene.recon.id).toBe('cam-01');
+    expect(s.initialScene.cameras[0]).toMatchObject({ id: 'cam-01', team: 'FRIENDLY', mount: 'WALL', position: { z: 0 } });
+    expect(s.initialScene.deployableCameras).toBe(2);
     expect(s.initialScene.colliders.find((c: any) => c.id === 'barrier-a')).toMatchObject({ isCover: true, isVaultable: true, visualRole: 'lowwall' });
     expect(s.initialScene.colliders.find((c: any) => c.id === 'jamb-c-far')).toMatchObject({ isVaultable: false });
     expect(s.defaultConfig.cameraStatus).toBe('OFFLINE');

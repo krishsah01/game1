@@ -51,6 +51,14 @@ export function Help({ onClose }: { onClose: () => void }) {
               <td>Selected aim depth − / + (world Z, never auto-locked to an enemy)</td>
             </tr>
             <tr>
+              <td>1 / 2</td>
+              <td>Equip the rifle (1) or a deployable camera (2). With the camera equipped, left mouse places it on the floor, ceiling or cover nearest the pointer (within reach); it snaps to the surface and sits on the lane (depth 0)</td>
+            </tr>
+            <tr>
+              <td>U</td>
+              <td>Activate / deactivate the camera link. Your cameras feed sight only while the link is LIVE. Any camera, yours or theirs, can be shot and destroyed; the opposition sees your cameras only through its own view cones</td>
+            </tr>
+            <tr>
               <td>B</td>
               <td>Brace on nearby cover (not while moving or sprinting)</td>
             </tr>

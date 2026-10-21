@@ -57,6 +57,7 @@ export function SceneCanvas({ controller, mode, devOptions, onToggleDeveloper, o
         onToggleDeveloper: () => callbacksRef.current.onToggleDeveloper(),
         onEscape: () => callbacksRef.current.onEscape(),
         onFire: () => controller.world?.command({ type: 'fire' }),
+        onToggleCameraLink: () => void controller.toggleCameraLink(),
       },
     );
     input.attach();

@@ -11,6 +11,7 @@
  */
 import { aabbFromBounds, aabbFromCenterSize, add, length, rayAabb, scale, sub, type Aabb } from '../shared/geometry.ts';
 import {
+  ACTOR_EYE_FRACTION,
   ACTOR_HEIGHT,
   ANCHORS,
   BODY_DEPTH,
@@ -28,15 +29,16 @@ import {
   depthWord,
   type StanceAnchors,
 } from '../shared/tuning.ts';
-import type { Bounds, DemoConfig, DemoSession, DepthZone, EntityKind, MoveMode, Scenario, SceneSeed, Stance, Vec3 } from '../shared/types.ts';
+import type { Bounds, CameraMount, CameraStatus, DemoConfig, DemoSession, DepthZone, EntityKind, MoveMode, Scenario, SceneSeed, Stance, Team, Vec3 } from '../shared/types.ts';
 import { applyRecoil, createAimState, currentDepthOffset, setSelectedDepth, stepSelectedDepth, updateAim, type AimState } from './aiming.ts';
 import { coverCandidates, evaluateCover, findVaultableAhead, type CoverCandidate, type CoverEvaluation } from './cover.ts';
-import { emptyHeld, type Command, type CoverIntent, type DepthLane, type HeldInput } from './input.ts';
+import { deployedCameraSeed, findPlacement, placementSurfaces, type Placement, type PlacementSurface } from './deploy.ts';
+import { emptyHeld, type Command, type CoverIntent, type DepthLane, type EquipSlot, type HeldInput } from './input.ts';
 import { createKnowledge, expireLastKnown, updateObservation, type KnowledgeState, type LastKnownRecord } from './knowledge.ts';
 import { blockersFromColliders, bodyBlockedBy, depthPathBlockedBy, moveBody, zoneAt, zoneFarZ, type MovementBlocker } from './movement.ts';
 import { createNoise, playerNoiseLabel, updateNoise, type NoisePulse, type NoiseState } from './noise.ts';
 import { createObjective, updateObjective, type ObjectiveState } from './objective.ts';
-import { cameraFacing, cameraObserver, cameraStatusLabel, type ReconState } from './recon.ts';
+import { cameraFacing, cameraHitBox, cameraObserver, cameraStatus, cameraStatusLabel, createCamera, type CameraState } from './recon.ts';
 import { createActor, updateActor, type ActorState } from './scripts.ts';
 import { resolveShot, shotTargetsFromColliders, type ShotResult, type ShotTarget } from './shots.ts';
 import {
@@ -81,6 +83,12 @@ export interface PlayerState {
   vault: VaultState | null;
   ammo: number;
   shotsFired: number;
+  /** Equipped inventory slot (1 rifle, 2 camera). */
+  equipped: EquipSlot;
+  /** Deployable cameras left in the inventory. */
+  cameraCharges: number;
+  /** Where LMB would place a camera right now (camera slot equipped, pointer on the canvas), else null. */
+  placement: Placement | null;
   lastBlockedBy: string | null;
   /** Which of the player's own body samples an opposing eye could see (developer readout). */
   exposure: { name: string; exposed: boolean }[];
@@ -94,13 +102,13 @@ export interface Tracer {
   trueEnd: Vec3;
   /** End point safe for player view: never stops on an unobserved actor. */
   publicEnd: Vec3;
-  hitKind: 'collider' | 'actor' | 'none';
+  hitKind: 'collider' | 'actor' | 'device' | 'none';
   hitId: string | null;
   hitLabel: string;
   /** Whether the hit actor was observed at the moment of the shot. */
   hitObserved: boolean;
   /** What the player may know about the outcome: the real hit, or the static obstruction beyond an unobserved actor. */
-  publicKind: 'collider' | 'actor' | 'none';
+  publicKind: 'collider' | 'actor' | 'device' | 'none';
   publicId: string | null;
   publicLabel: string;
   sampledOffset: number;
@@ -112,9 +120,21 @@ export interface LogEntry {
   text: string;
 }
 
+/** Camera device details carried by a CAMERA entity view. */
+export interface DeviceView {
+  status: CameraStatus;
+  mount: CameraMount;
+  mountNormal: Vec3;
+  facing: Vec3;
+  fovDegrees: number;
+  range: number;
+  deployed: boolean;
+}
+
 export interface EntityView {
   id: string;
   kind: EntityKind;
+  team: Team;
   label: string;
   position: Vec3;
   facingX: -1 | 1;
@@ -124,6 +144,31 @@ export interface EntityView {
   sources: string[];
   hitFlash: boolean;
   height: number;
+  /** Present for CAMERA entities. */
+  device: DeviceView | null;
+}
+
+/**
+ * A camera's status record. Friendly records are player-owned UI (always
+ * listed, like a link icon); they never assert that the device is currently
+ * seen. Opposing records are listed in developer mode only.
+ */
+export interface CameraRecord {
+  id: string;
+  label: string;
+  team: Team;
+  status: CameraStatus;
+  statusLabel: string;
+  mount: CameraMount;
+  deployed: boolean;
+  position: Vec3;
+  facing: Vec3;
+  fovDegrees: number;
+  range: number;
+  /** The player side currently observes the device (drawn in the world). */
+  deviceObserved: boolean;
+  /** Opposing observers that currently see this device (developer mode only, else []). */
+  spottedBy: string[];
 }
 
 export interface Presentation {
@@ -140,7 +185,10 @@ export interface Presentation {
   pulses: { pulse: NoisePulse; age: number }[];
   tracers: { tracer: Tracer; age: number }[];
   objective: ObjectiveState;
-  camera: { id: string; label: string; status: DemoConfig['cameraStatus']; statusLabel: string; position: Vec3; facing: Vec3; fovDegrees: number; range: number; deviceObserved: boolean };
+  /** Friendly camera link (config.cameraStatus), toggled with U. */
+  cameraLink: { status: CameraStatus; statusLabel: string };
+  /** Friendly status records always; opposing records in developer mode only. */
+  cameras: CameraRecord[];
   smoke: { enabled: boolean; bounds: Bounds };
   aim: {
     selectedDepth: number;
@@ -159,6 +207,9 @@ export interface Presentation {
   dev: null | {
     playerSight: EntityObservation[];
     cameraSight: EntityObservation[];
+    /** What the opposition's eyes and cameras see of the player and the friendly cameras. */
+    opforSight: EntityObservation[];
+    opforObservers: Observer[];
     firingLine: ShotResult | null;
     lastFiringLineTest: { result: ShotResult; simTime: number } | null;
     log: LogEntry[];
@@ -173,6 +224,8 @@ const FACING_HYSTERESIS = 0.35;
 const TRACER_LIFETIME = 0.6;
 const LOG_CAP = 80;
 const SMOOTH_RECORD_CAP = 24;
+/** Label anchor height above a camera device (EntityView.height for CAMERA entities). */
+const CAMERA_TAG_HEIGHT = 0.3;
 
 export class World {
   readonly scenario: Scenario;
@@ -186,8 +239,10 @@ export class World {
 
   player!: PlayerState;
   actors: ActorState[] = [];
-  recon!: ReconState;
+  cameras: CameraState[] = [];
   knowledge!: KnowledgeState;
+  /** The opposition's own observed set (friendly cameras and the player). Never shown in player mode. */
+  opforKnowledge!: KnowledgeState;
   aim!: AimState;
   noise!: NoiseState;
   objective!: ObjectiveState;
@@ -206,11 +261,15 @@ export class World {
   private playerSight: EntityObservation[] = [];
   private cameraSight: EntityObservation[] = [];
   private observers: Observer[] = [];
+  private opforSight: EntityObservation[] = [];
+  private opforObservers: Observer[] = [];
+  private deployedCount = 0;
 
   private readonly movementBlockers: MovementBlocker[];
   private readonly sightBlockers: SightBlocker[];
   private readonly staticShotTargets: ShotTarget[];
   private readonly coverCands: CoverCandidate[];
+  private readonly placementSurfaces: PlacementSurface[];
 
   constructor(scenario: Scenario, session: Pick<DemoSession, 'config' | 'seed'>) {
     this.scenario = scenario;
@@ -221,6 +280,7 @@ export class World {
     this.sightBlockers = sightBlockersFromColliders(this.scene.colliders);
     this.staticShotTargets = shotTargetsFromColliders(this.scene.colliders);
     this.coverCands = coverCandidates(this.scene.colliders);
+    this.placementSurfaces = placementSurfaces(this.scene.colliders);
     this.reset();
   }
 
@@ -238,8 +298,10 @@ export class World {
     this.stepOnceRequested = false;
     this.held = emptyHeld();
     this.actors = seeds.filter((e) => e.kind !== 'PLAYER').map(createActor);
-    this.recon = { seed: this.scene.recon, status: this.config.cameraStatus };
+    this.cameras = this.scene.cameras.map((c) => createCamera(c));
+    this.deployedCount = 0;
     this.knowledge = createKnowledge();
+    this.opforKnowledge = createKnowledge();
     this.aim = createAimState(this.seed);
     this.aim.frequencyHz = this.config.swayFrequencyHz;
     this.noise = createNoise();
@@ -252,6 +314,8 @@ export class World {
     this.wasMoving = false;
     this.playerSight = [];
     this.cameraSight = [];
+    this.opforSight = [];
+    this.opforObservers = [];
     const position = { ...playerSeed.position };
     const cover = evaluateCover(
       { position, facingX: playerSeed.facingX, stance: playerSeed.stance, moving: false, observeHeld: false, aimHeld: false, sprinting: false, aimPitch: 0, vaulting: false },
@@ -272,6 +336,9 @@ export class World {
       vault: null,
       ammo: MAGAZINE_SIZE,
       shotsFired: 0,
+      equipped: 'RIFLE',
+      cameraCharges: this.scene.deployableCameras,
+      placement: null,
       lastBlockedBy: null,
       exposure: [],
     };
@@ -283,8 +350,10 @@ export class World {
   applyConfig(config: DemoConfig): void {
     const prev = this.config;
     this.config = { ...config };
-    this.recon.status = config.cameraStatus;
-    if (prev.cameraStatus !== config.cameraStatus) this.pushLog(`CAM 01 link: ${cameraStatusLabel(config.cameraStatus)}.`);
+    if (prev.cameraStatus !== config.cameraStatus) {
+      this.pushLog(`Camera link: ${cameraStatusLabel(config.cameraStatus)}.`);
+      this.feedback(`CAMERA LINK · ${cameraStatusLabel(config.cameraStatus)}`);
+    }
     if (prev.smokeEnabled !== config.smokeEnabled) this.pushLog(`Smoke ${config.smokeEnabled ? 'deployed' : 'cleared'}.`);
   }
 
@@ -337,7 +406,17 @@ export class World {
         this.startVault();
         return null;
       case 'fire':
+        if (p.equipped === 'CAMERA') {
+          this.deployCamera();
+          return null;
+        }
         return this.fire(false);
+      case 'equip':
+        this.equip(cmd.slot);
+        return null;
+      case 'deployCamera':
+        this.deployCamera(cmd.at);
+        return null;
       case 'testFiringLine':
         return this.fire(true);
       case 'reload':
@@ -454,6 +533,69 @@ export class World {
   /** Player-safe transient HUD feedback (never reveals hidden state). */
   private feedback(text: string): void {
     this.message = { text, simTime: this.simTime };
+  }
+
+  /** Public form of `feedback` for the app shell (e.g. the camera-link key). */
+  notify(text: string): void {
+    this.feedback(text);
+  }
+
+  private equip(slot: EquipSlot): void {
+    const p = this.player;
+    if (slot === 'CAMERA' && p.cameraCharges <= 0) {
+      this.feedback('NO CAMERAS LEFT');
+      return;
+    }
+    if (p.equipped === slot) return;
+    p.equipped = slot;
+    if (slot === 'CAMERA') p.braced = false;
+    this.feedback(slot === 'CAMERA' ? `CAMERA ×${p.cameraCharges} · LMB to place` : 'RIFLE');
+  }
+
+  /** Chest point placement reach and line-of-reach are measured from. */
+  private placementOrigin(): Vec3 {
+    const p = this.player;
+    return { x: p.position.x, y: p.position.y + p.cover.anchors.height * 0.6, z: p.position.z };
+  }
+
+  /** Placement for a pointer position (pure query). */
+  placementAt(at: { x: number; y: number }): Placement {
+    const occupied = this.cameras.filter((c) => !c.destroyed).map((c) => c.seed.position);
+    return findPlacement(at, { from: this.placementOrigin(), surfaces: this.placementSurfaces, occupied });
+  }
+
+  /** Places a camera from the inventory on the snap surface nearest `at` (or the pointer). */
+  private deployCamera(at?: { x: number; y: number }): void {
+    const p = this.player;
+    if (p.cameraCharges <= 0) {
+      this.feedback('NO CAMERAS LEFT');
+      return;
+    }
+    if (p.vault) {
+      this.feedback('VAULTING · cannot place');
+      return;
+    }
+    const point = at ?? this.held.pointerWorld;
+    if (!point) {
+      this.feedback('POINT AT A SURFACE TO PLACE');
+      return;
+    }
+    const placement = this.placementAt(point);
+    if (!placement.ok) {
+      this.feedback(placement.reason ?? 'CANNOT PLACE HERE');
+      this.pushLog(`Camera placement refused: ${placement.reason}.`);
+      return;
+    }
+    this.deployedCount += 1;
+    const index = this.cameras.filter((c) => c.seed.team === 'FRIENDLY').length + 1;
+    const label = `CAM ${String(index).padStart(2, '0')}`;
+    const seed = deployedCameraSeed(`cam-d${this.deployedCount}`, label, 'FRIENDLY', placement, p.facingX);
+    this.cameras.push(createCamera(seed, true));
+    p.cameraCharges -= 1;
+    if (p.cameraCharges === 0) p.equipped = 'RIFLE';
+    const linked = this.config.cameraStatus === 'ONLINE';
+    this.feedback(`${label} PLACED · ${seed.mount}${linked ? ' · LIVE' : ' · U to link'}`);
+    this.pushLog(`${label} deployed on ${placement.surfaceId} (${seed.mount}) at x=${seed.position.x.toFixed(2)} y=${seed.position.y.toFixed(2)}.`);
   }
 
   /**
@@ -669,6 +811,7 @@ export class World {
     );
     this.clampMuzzle(p.cover);
     if (!p.cover.braceable) p.braced = false;
+    p.placement = p.equipped === 'CAMERA' && held.pointerWorld && !p.vault ? this.placementAt(held.pointerWorld) : null;
 
     // ---- 4. scripted actors --------------------------------------------
     if (dt > 0) for (const a of this.actors) updateActor(a, dt);
@@ -681,8 +824,19 @@ export class World {
       fovDegrees: cfg.visionFovDegrees,
       range: cfg.visionRange,
     };
-    const camObserver = cameraObserver(this.recon);
-    this.observers = camObserver ? [playerObserver, camObserver] : [playerObserver];
+    const camObservers = this.cameras
+      .filter((c) => c.seed.team === 'FRIENDLY')
+      .map((c) => cameraObserver(c, cfg.cameraStatus))
+      .filter((o): o is Observer => o !== null);
+    this.observers = [playerObserver, ...camObservers];
+    // The opposition watches with the same rules: actor eyes plus its own live cameras.
+    this.opforObservers = [
+      ...this.actors.filter((a) => a.team === 'OPPOSING').map((a) => this.actorObserver(a)),
+      ...this.cameras
+        .filter((c) => c.seed.team === 'OPPOSING')
+        .map((c) => cameraObserver(c, cfg.cameraStatus))
+        .filter((o): o is Observer => o !== null),
+    ];
     const smokeBox: Aabb | null = cfg.smokeEnabled ? aabbFromBounds(this.scene.smokeBounds) : null;
 
     // ---- 6. dynamic visibility + knowledge -----------------------------
@@ -706,6 +860,22 @@ export class World {
       if (ev?.type === 'lost' && ev.position) this.pushLog(`Contact lost: ${entity.label}. Last known frozen at x=${ev.position!.x.toFixed(1)} z=${ev.position!.z.toFixed(1)}.`);
     }
     for (const r of expireLastKnown(this.knowledge, this.simTime, cfg.lastKnownSeconds)) this.pushLog(`Last-known marker for ${r.label} expired.`);
+
+    // ---- 6b. what the opposition sees (player + friendly cameras) -------
+    this.opforSight = [];
+    for (const entity of this.opforTargets()) {
+      const sources: string[] = [];
+      let raw = 0;
+      for (const o of this.opforObservers) {
+        const obs = observeEntity(o, entity, this.sightBlockers, smokeBox);
+        this.opforSight.push(obs);
+        if (obs.observed) sources.push(o.id);
+        raw = Math.max(raw, obs.visibleSamples);
+      }
+      const ev = updateObservation(this.opforKnowledge, entity, entity.position, sources, raw, this.simTime, false);
+      if (ev?.type === 'observed') this.pushLog(`OPFOR spotted ${entity.label} via ${ev.sources?.map((id) => this.observerLabel(id)).join(' + ')}.`);
+      if (ev?.type === 'lost') this.pushLog(`OPFOR lost sight of ${entity.label}.`);
+    }
 
     // ---- 7. static readability (coarse, periodic) ----------------------
     if (this.tick % STATIC_LIT_INTERVAL === 0 || dt === 0) {
@@ -754,9 +924,33 @@ export class World {
           ]
         : actorSamples(a.position, ACTOR_HEIGHT[a.stance]),
     }));
-    const cam = this.recon.seed;
-    list.push({ id: cam.id, kind: 'CAMERA', label: cam.label, position: cam.position, samples: [{ name: 'lens', point: cam.position }] });
+    for (const c of this.cameras) list.push(this.cameraTarget(c));
     return list;
+  }
+
+  /** A camera device as something to observe: one sample at the lens. */
+  private cameraTarget(c: CameraState): { id: string; kind: EntityKind; label: string; position: Vec3; samples: { name: string; point: Vec3 }[] } {
+    return { id: c.seed.id, kind: 'CAMERA', label: c.seed.label, position: c.seed.position, samples: [{ name: 'lens', point: c.seed.position }] };
+  }
+
+  /** What the opposition can observe: the player's body and every friendly camera device. */
+  private opforTargets(): { id: string; kind: EntityKind; label: string; position: Vec3; samples: { name: string; point: Vec3 }[] }[] {
+    const p = this.player;
+    const samples = actorSamples(p.position, p.cover.anchors.height).map((s) =>
+      s.name === 'head' && p.cover.peekLean !== 0 ? { ...s, point: { ...s.point, z: s.point.z + p.cover.peekLean } } : s,
+    );
+    return [{ id: 'player', kind: 'PLAYER', label: 'YOU', position: p.position, samples }, ...this.cameras.filter((c) => c.seed.team === 'FRIENDLY').map((c) => this.cameraTarget(c))];
+  }
+
+  /** An opposing actor's eye as an observer (same FOV and range rules as the player). */
+  private actorObserver(a: ActorState): Observer {
+    return {
+      id: a.id,
+      origin: { x: a.position.x, y: a.position.y + ACTOR_HEIGHT[a.stance] * ACTOR_EYE_FRACTION, z: a.position.z },
+      facing: { x: a.facingX, y: 0, z: 0 },
+      fovDegrees: this.config.visionFovDegrees,
+      range: this.config.visionRange,
+    };
   }
 
   private updateExposure(smokeBox: Aabb | null): void {
@@ -775,7 +969,7 @@ export class World {
         nearest = e;
       }
     }
-    const eyeY = ACTOR_HEIGHT[nearest.stance] * 0.9;
+    const eyeY = ACTOR_HEIGHT[nearest.stance] * ACTOR_EYE_FRACTION;
     const observer: Observer = {
       id: nearest.id,
       origin: { x: nearest.position.x, y: nearest.position.y + eyeY, z: nearest.position.z },
@@ -791,7 +985,9 @@ export class World {
     p.exposure = obs.samples.map((s) => ({ name: s.name, exposed: s.reason === 'clear' }));
   }
 
-  private sourceLabel = (id: string): string => (id === 'player' ? 'DIRECT' : this.recon.seed.label);
+  private sourceLabel = (id: string): string => (id === 'player' ? 'DIRECT' : (this.cameras.find((c) => c.seed.id === id)?.seed.label ?? id));
+
+  private observerLabel = (id: string): string => this.cameras.find((c) => c.seed.id === id)?.seed.label ?? this.actors.find((a) => a.id === id)?.label ?? id;
 
   private pushLog(text: string): void {
     this.log.push({ simTime: this.simTime, text });
@@ -818,7 +1014,15 @@ export class World {
         ? aabbFromCenterSize({ x: a.position.x, y: a.position.y + 0.25, z: a.position.z }, { x: 0.6, y: 0.5, z: 0.45 })
         : aabbFromCenterSize({ x: a.position.x, y: a.position.y + ACTOR_HEIGHT[a.stance] / 2, z: a.position.z }, { x: BODY_WIDTH, y: ACTOR_HEIGHT[a.stance], z: BODY_DEPTH }),
     }));
-    return [...this.staticShotTargets, ...actors];
+    const devices: ShotTarget[] = this.cameras.filter((c) => !c.destroyed).map((c) => ({ kind: 'device', id: c.seed.id, label: c.seed.label, box: cameraHitBox(c) }));
+    return [...this.staticShotTargets, ...actors, ...devices];
+  }
+
+  /** The player may know about a hit on their own team's device, or on anything they currently observe. */
+  private hitIsPublic(kind: 'collider' | 'actor' | 'device', id: string): boolean {
+    if (kind === 'collider') return true;
+    if (kind === 'device' && this.cameras.find((c) => c.seed.id === id)?.seed.team === 'FRIENDLY') return true;
+    return this.knowledge.observations.get(id)?.observed ?? false;
   }
 
   /** Resolves the firing line for the current state without side effects. */
@@ -855,8 +1059,8 @@ export class World {
       this.lastFiringLineTest = { result, simTime: this.simTime };
     }
     const hit = result.hit;
-    const hitObserved = hit?.kind === 'actor' ? (this.knowledge.observations.get(hit.id)?.observed ?? false) : false;
-    const hiddenActor = hit?.kind === 'actor' && !hitObserved;
+    const hitObserved = hit && hit.kind !== 'collider' ? this.hitIsPublic(hit.kind, hit.id) : false;
+    const hiddenActor = hit !== null && hit.kind !== 'collider' && !hitObserved;
     // The player may only learn what a shot would have told them without the hidden body on the line.
     const publicHit = hiddenActor ? result.staticHit : hit;
     const publicEnd = hiddenActor ? (result.staticHit ? result.staticHit.point : add(result.origin, scale(result.direction, SHOT_MAX_RANGE))) : result.end;
@@ -881,11 +1085,19 @@ export class World {
       const a = this.actors.find((x) => x.id === hit.id);
       if (a) a.hitFlashUntil = this.simTime + 0.25;
     }
+    if (hit?.kind === 'device' && !test) {
+      const cam = this.cameras.find((c) => c.seed.id === hit.id);
+      if (cam && !cam.destroyed) {
+        cam.destroyed = true;
+        this.pushLog(`${cam.seed.label} (${cam.seed.team}) destroyed by a shot.`);
+      }
+    }
     // Feedback is derived from the public outcome so an unseen body never changes what the player sees.
-    if (test) this.message = { text: publicHit ? `FIRING LINE · ${publicHit.kind === 'actor' ? 'clear to target' : `blocked by ${publicHit.label}`}` : 'FIRING LINE · clear', simTime: this.simTime };
+    if (test) this.message = { text: publicHit ? `FIRING LINE · ${publicHit.kind !== 'collider' ? 'clear to target' : `blocked by ${publicHit.label}`}` : 'FIRING LINE · clear', simTime: this.simTime };
     else if (publicHit?.kind === 'actor') this.message = { text: 'HIT', simTime: this.simTime };
+    else if (publicHit?.kind === 'device') this.message = { text: `CAMERA DESTROYED · ${publicHit.label}`, simTime: this.simTime };
     else if (publicHit?.kind === 'collider') this.message = { text: `IMPACT · ${publicHit.label}`, simTime: this.simTime };
-    const where = hit ? `${hit.kind === 'actor' ? 'ACTOR' : 'COVER'} ${hit.id} at ${hit.t.toFixed(2)} m` : 'nothing within range';
+    const where = hit ? `${hit.kind === 'actor' ? 'ACTOR' : hit.kind === 'device' ? 'DEVICE' : 'COVER'} ${hit.id} at ${hit.t.toFixed(2)} m` : 'nothing within range';
     this.pushLog(`${test ? 'Firing-line test' : 'Shot'} [${p.cover.state}] depth ${this.aim.selectedDepth.toFixed(2)}${offset >= 0 ? '+' : ''}${offset.toFixed(2)} → ${where}.`);
     return result;
   }
@@ -903,6 +1115,7 @@ export class World {
       entities.push({
         id: a.id,
         kind: a.kind,
+        team: a.team,
         label: a.label,
         position: { ...a.position },
         facingX: a.facingX,
@@ -912,10 +1125,51 @@ export class World {
         sources: obs?.sources ?? [],
         hitFlash: observed && this.simTime < a.hitFlashUntil,
         height: a.kind === 'DROPPED_GEAR' ? 0.5 : ACTOR_HEIGHT[a.stance],
+        device: null,
       });
     }
-    const camObs = k.observations.get(this.recon.seed.id);
-    const deviceObserved = camObs?.observed ?? false;
+    // Camera devices are dynamic objects for both teams: drawn only while observed.
+    const cameras: CameraRecord[] = [];
+    for (const c of this.cameras) {
+      const obs = k.observations.get(c.seed.id);
+      const observed = obs?.observed ?? false;
+      const status = cameraStatus(c, this.config.cameraStatus);
+      const facing = cameraFacing(c.seed);
+      if (mode === 'developer' || observed) {
+        entities.push({
+          id: c.seed.id,
+          kind: 'CAMERA',
+          team: c.seed.team,
+          label: c.seed.label,
+          position: { ...c.seed.position },
+          facingX: facing.x >= 0 ? 1 : -1,
+          stance: 'STANDING',
+          moving: false,
+          observed,
+          sources: obs?.sources ?? [],
+          hitFlash: false,
+          height: CAMERA_TAG_HEIGHT,
+          device: { status, mount: c.seed.mount, mountNormal: { ...c.seed.mountNormal }, facing, fovDegrees: c.seed.fovDegrees, range: c.seed.range, deployed: c.deployed },
+        });
+      }
+      if (mode === 'developer' || c.seed.team === 'FRIENDLY') {
+        cameras.push({
+          id: c.seed.id,
+          label: c.seed.label,
+          team: c.seed.team,
+          status,
+          statusLabel: cameraStatusLabel(status),
+          mount: c.seed.mount,
+          deployed: c.deployed,
+          position: { ...c.seed.position },
+          facing,
+          fovDegrees: c.seed.fovDegrees,
+          range: c.seed.range,
+          deviceObserved: observed,
+          spottedBy: mode === 'developer' ? (this.opforKnowledge.observations.get(c.seed.id)?.observed ? (this.opforKnowledge.observations.get(c.seed.id)?.sources ?? []) : []) : [],
+        });
+      }
+    }
     const offset = currentDepthOffset(this.aim);
     return {
       mode,
@@ -943,17 +1197,8 @@ export class World {
         age: this.simTime - tracer.simTime,
       })),
       objective: { ...this.objective },
-      camera: {
-        id: this.recon.seed.id,
-        label: this.recon.seed.label,
-        status: this.recon.status,
-        statusLabel: cameraStatusLabel(this.recon.status),
-        position: this.recon.seed.position,
-        facing: cameraFacing(this.recon.seed),
-        fovDegrees: this.recon.seed.fovDegrees,
-        range: this.recon.seed.range,
-        deviceObserved,
-      },
+      cameraLink: { status: this.config.cameraStatus, statusLabel: cameraStatusLabel(this.config.cameraStatus) },
+      cameras,
       smoke: { enabled: this.config.smokeEnabled, bounds: this.scene.smokeBounds },
       aim: {
         selectedDepth: this.aim.selectedDepth,
@@ -972,6 +1217,8 @@ export class World {
           ? {
               playerSight: this.playerSight,
               cameraSight: this.cameraSight,
+              opforSight: this.opforSight,
+              opforObservers: this.opforObservers,
               firingLine: this.previewShot(),
               lastFiringLineTest: this.lastFiringLineTest,
               log: this.log.slice(-SMOOTH_RECORD_CAP),

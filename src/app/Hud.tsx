@@ -1,7 +1,7 @@
 /**
- * Player HUD: stance, speed, noise, depth, ammo, capture status, camera link
- * status. Deliberately shows no enemy positions, no visibility scores and no
- * event log.
+ * Player HUD: stance, speed, noise, depth, ammo, inventory, capture status,
+ * camera link and own-camera status records. Deliberately shows no enemy
+ * positions, no visibility scores and no event log.
  */
 import { MAGAZINE_SIZE } from '../shared/tuning.ts';
 import type { Presentation } from '../simulation/world.ts';
@@ -55,9 +55,19 @@ export function Hud({ p }: { p: Presentation }) {
       </div>
       <div className="hud top-right">
         <div className="hud-row">
-          <span className="hud-k">{p.camera.label}</span>
-          <span className={`hud-v link ${p.camera.status.toLowerCase()}`}>{p.camera.statusLabel}</span>
+          <span className="hud-k">CAM LINK</span>
+          <span className={`hud-v link ${p.cameraLink.status.toLowerCase()}`}>{p.cameraLink.statusLabel}</span>
+          <span className="hud-k">U</span>
         </div>
+        {p.cameras
+          .filter((c) => c.team === 'FRIENDLY')
+          .map((c) => (
+            <div className="hud-row" key={c.id}>
+              <span className="hud-k">{c.label}</span>
+              <span className={`hud-v link ${c.status.toLowerCase()}`}>{c.statusLabel}</span>
+              {c.deployed && <span className="hud-k">{c.mount}</span>}
+            </div>
+          ))}
         {p.smoke.enabled && (
           <div className="hud-row">
             <span className="hud-v muted">SMOKE DEPLOYED</span>
@@ -69,6 +79,15 @@ export function Hud({ p }: { p: Presentation }) {
           <span className="big">{pl.ammo}</span>
           <span className="small">/ {MAGAZINE_SIZE}</span>
         </div>
+        <div className="hud-row inventory">
+          <span className={`slot ${pl.equipped === 'RIFLE' ? 'on' : ''}`}>1 RIFLE</span>
+          <span className={`slot ${pl.equipped === 'CAMERA' ? 'on' : ''} ${pl.cameraCharges === 0 ? 'empty' : ''}`}>2 CAMERA ×{pl.cameraCharges}</span>
+        </div>
+        {pl.placement && (
+          <div className="hud-row">
+            <span className={`hud-v ${pl.placement.ok ? 'accent' : 'amber'}`}>{pl.placement.ok ? `PLACE · ${pl.placement.mount}` : pl.placement.reason}</span>
+          </div>
+        )}
         {p.message && (
           <div className="hud-row">
             <span className="hud-v amber">{p.message}</span>
@@ -93,6 +112,8 @@ export function Hud({ p }: { p: Presentation }) {
         <span>LMB fire</span>
         <span>Q/E aim depth</span>
         <span>B brace</span>
+        <span>1/2 rifle/camera</span>
+        <span>U cam link</span>
         <span>Tab speed</span>
         <span>V developer</span>
         <span>Esc help</span>

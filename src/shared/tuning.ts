@@ -155,6 +155,35 @@ export const SELECTED_DEPTH_MIN = -1.5;
 export const SELECTED_DEPTH_MAX = 1.0;
 export const SELECTED_DEPTH_STEP = 0.25;
 
+/**
+ * Recon cameras (v0.2.2). Every camera sits on the lane plane (z = 0), so the
+ * default aim depth can shoot it. A deployed camera snaps to the nearest
+ * exposed surface (ground, ceiling or any solid crossing the lane) near the
+ * pointer, within reach of the body.
+ */
+export const CAMERA = {
+  /** Depth of every camera device. */
+  z: 0,
+  /** Shot proxy of the device (full size, metres). */
+  hitSize: { x: 0.34, y: 0.26, z: 0.34 },
+  /** Device centre sits this far off the surface it is fixed to. */
+  mountOffset: 0.14,
+  /** The pointer must be within this distance of a surface to snap to it. */
+  snapRadius: 1.0,
+  /** Device centre must be within this distance of the body's chest. */
+  placeReach: 3.0,
+  /** Minimum spacing between two devices. */
+  minSpacing: 0.45,
+  /** Deployed camera optics. */
+  deployFovDegrees: 80,
+  deployRange: 9,
+  /** Look pitch per mount, degrees (positive = up). */
+  deployPitch: { CEILING: -35, GROUND: 12, WALL: -15, COVER: -6 },
+} as const;
+
+/** Opposing actors watch with the same rules as the player: eye height = this fraction of collider height. */
+export const ACTOR_EYE_FRACTION = 0.9;
+
 export const SHOT_MAX_RANGE = 60;
 export const MAGAZINE_SIZE = 24;
 

@@ -11,7 +11,7 @@ import { SHOT_MAX_RANGE } from '../shared/tuning.ts';
 import type { ColliderSeed, Vec3 } from '../shared/types.ts';
 
 export interface ShotTarget {
-  kind: 'collider' | 'actor';
+  kind: 'collider' | 'actor' | 'device';
   id: string;
   label: string;
   box: Aabb;
@@ -21,7 +21,7 @@ export const shotTargetsFromColliders = (colliders: ColliderSeed[]): ShotTarget[
   colliders.filter((c) => c.blocksShots).map((c) => ({ kind: 'collider', id: c.id, label: c.visualRole, box: aabbFromBounds(c.bounds) }));
 
 export interface ShotHit {
-  kind: 'collider' | 'actor';
+  kind: 'collider' | 'actor' | 'device';
   id: string;
   label: string;
   t: number;

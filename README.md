@@ -78,7 +78,7 @@ drive gameplay (`src/shared/scenarios.ts`):
 | C / Depth (x 10…14.8) | partition with a 0.7 m slot (real 3D jambs), target at selectable depth | depth movement, muzzle obstruction, bracing, shot-depth sampling |
 | CONTROL A (x 14.8…19) | capture terminal, zone, tall crate stack the defender can hide behind | illustrative capture and CONTESTED |
 
-Seven guided presets reposition the player, actors and configuration on that
+Eight guided presets reposition the player, actors and configuration on that
 shared map; each is a real GraphQL session. A guided-tour button walks through
 them with captions. Player view and Developer view (`V`) are separate
 presentations of the same simulation.
@@ -94,6 +94,14 @@ presentations of the same simulation.
 ### New in prototype v0.2.1 (Linear 2DS-3)
 
 - **Peek from depth cover with the observe key.** Off the lane (FAR in a depth zone) with full-height cover directly ahead, such as the far jamb at station C, the body is in *depth cover* and the HUD offers `F peek`. Holding `F` leans the head toward the lane until the eye clears the cover's lane-side edge by 0.10 m (at most 1.0 m of lean; cover whose edge is farther away is not depth cover). Only the eye and the head sample move: the body collider stays put and the rifle stays lowered behind the cover, so the firing line still ends on the jamb, the same split as observe over a low wall. Standing or crouched, not prone; moving or aiming cancels it. The lean is stopped short of any solid the head would enter. Tuning: `PEEK` in `src/shared/tuning.ts`.
+
+### New in prototype v0.2.2 (Linear 2DS-4)
+
+- **Activate cameras with `U`.** `U` toggles the friendly camera link LIVE ⇄ OFFLINE through the same `updateConfig` mutation the inspector uses (revision bumps). A jammed or destroyed link cannot be activated from the field; with the API unreachable the toggle still applies locally.
+- **Every camera sits on the lane plane (z = 0)** and has a 0.34 m shot proxy, so the default aim depth can hit it. CAM 01 moved from the back wall onto the station-B face of the station-C lintel (same view of the far room, same crate blind spot). **Shooting a camera destroys it**, yours or theirs: it stops feeding sight at once, its status record shows DESTROYED and the wreck droops on its bracket.
+- **Deployable cameras in the inventory.** `1` equips the rifle, `2` a camera (two per preset). With the camera equipped, a ghost shows where it would go and left mouse places it: it snaps to the exposed surface nearest the pointer (within 1.0 m): the floor (GROUND), the ceiling or a lintel underside (CEILING), the side of a wall or jamb (WALL) or any face of a prop such as a low wall or crate (COVER). It must be within 3.0 m of the chest with a clear line; reaching over the cover you hide behind is fine, reaching through a wall is not. A placed camera looks the way you face (or away from its wall) with a per-mount pitch; it feeds sight only while the link is LIVE. Tuning: `CAMERA` in `src/shared/tuning.ts`; placement in `src/simulation/deploy.ts`.
+- **Cameras are dynamic objects for both sides.** The player sees any device (including their own, per the handoff) only while some friendly observer sees it. The opposition now has its own observed set: each OPFOR actor's eye (same FOV/range rules as yours) plus OPFOR cameras. Your cameras, and you, are known to the opposition only through those view cones. The developer view draws OPFOR view fans, their clear sight rays (red) and, in the inspector, which observer spotted each of your cameras.
+- **Preset 8, Camera war**: two cameras in the inventory, OPFOR A beyond the low wall and an OPFOR camera under the ceiling.
 
 Mechanics (all in plain TypeScript under `src/simulation/`, independent of
 React and Three.js):
@@ -147,6 +155,8 @@ React and Three.js):
 | Mouse height | the arms and rifle swing toward the pointer; the shot leaves the barrel tip |
 | Q / E | selected aim depth − / + (0.25 m steps, −1.5…+1.0 m); never auto-locks to an enemy |
 | B | brace on cover within reach (not while moving or sprinting) |
+| 1 / 2 | equip the rifle / a deployable camera (left mouse then places it on the nearest floor, ceiling or cover) |
+| U | camera link on/off (an `updateConfig` mutation) |
 | V | developer view |
 | P / . | pause / step one tick |
 | R | reload |
@@ -291,6 +301,15 @@ scenario mid-mutation.
 | FAR behind the station-C far jamb counts as depth cover; target unseen, player unexposed | verified | `tests/peek.test.ts`; screenshot 11a |
 | Hold F in depth cover peeks: eye leans past the jamb edge, target observed, only the head exposed, body and muzzle stay behind the jamb (firing line ends on it) | verified | `tests/peek.test.ts`; screenshots 11b, 11c |
 | Releasing F, aiming or moving ends the peek; works standing and crouched, not prone; no depth cover on the lane; observe over low walls unchanged | verified | `tests/peek.test.ts` |
+
+### Prototype v0.2.2 (2DS-4)
+
+| Item | Result | Evidence |
+| --- | --- | --- |
+| U toggles the friendly link through a real `updateConfig` mutation; a jammed link is refused | verified | `tests/cameras.test.ts` (SessionController) |
+| Every camera sits at depth 0; shooting a camera (either team) destroys it and stops its sight | verified | `tests/cameras.test.ts` |
+| Deployable cameras: inventory slot, LMB places, snaps to cover top / ground / ceiling, refuses out of reach, through walls and in mid-air | verified | `tests/cameras.test.ts` |
+| Opposition sees friendly cameras only through its own view cones (actor eyes, OPFOR cameras) | verified | `tests/cameras.test.ts` |
 
 ### GraphQL and application state
 
