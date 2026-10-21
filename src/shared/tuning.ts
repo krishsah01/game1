@@ -52,7 +52,7 @@ export interface StanceAnchors {
   pivotY: number;
 }
 
-export type CoverState = 'none' | 'hidden' | 'observe' | 'aimOver';
+export type CoverState = 'none' | 'hidden' | 'observe' | 'aimOver' | 'peek';
 
 export const ANCHORS = {
   standing: { eyeY: 1.62, muzzleY: 1.38, height: 1.8, eyeForward: 0.12, muzzleForward: 0.62, pivotForward: 0.0, pivotY: 1.34 },
@@ -89,6 +89,17 @@ export const COVER_REACH = 0.75;
 export const BRACE_REACH = 0.75;
 /** Extra depth tolerance for bracing: a door jamb beside the slot still counts. */
 export const BRACE_Z_SLACK = 0.45;
+
+/**
+ * Depth-cover peek (hold F). Off the lane, with full-height cover directly
+ * ahead, the head leans toward the lane until the eye clears the cover's
+ * lane-side edge by `clearance`. Cover whose edge needs a longer lean than
+ * `maxLean` is not depth cover. The body and the rifle stay put.
+ */
+export const PEEK = {
+  clearance: 0.1,
+  maxLean: 1.0,
+};
 
 /** Vault (Space): go over an `isVaultable` obstacle directly ahead. */
 export const VAULT = {

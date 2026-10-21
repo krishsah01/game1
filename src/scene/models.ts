@@ -45,6 +45,8 @@ export interface SoldierPose {
   aimPitch: number;
   /** 0..1 while a vault is in progress (legs tuck), null otherwise. */
   vaultProgress: number | null;
+  /** Signed z offset of the eye while peeking from depth cover; the head and shoulders lean with it. */
+  peekLean?: number;
 }
 
 interface Pt {
@@ -68,6 +70,8 @@ export class SoldierModel {
   private aimPitchTarget = 0;
   private aimPitch = 0;
   private vaultProgress: number | null = null;
+  private peekLeanTarget = 0;
+  private peekLean = 0;
 
   constructor(tint: SoldierTint) {
     const mk = (name: string, geo: BoxGeometry | SphereGeometry | CylinderGeometry, color: number) => {
@@ -119,6 +123,7 @@ export class SoldierModel {
   setPose(pose: SoldierPose): void {
     this.aimPitchTarget = pose.aimPitch;
     this.vaultProgress = pose.vaultProgress;
+    this.peekLeanTarget = pose.peekLean ?? 0;
   }
 
   /** Interpolates the visual pose toward the mechanical anchors and lays out the parts. */
@@ -135,6 +140,7 @@ export class SoldierModel {
     c.pivotForward += (t.pivotForward - c.pivotForward) * k;
     c.pivotY += (t.pivotY - c.pivotY) * k;
     this.aimPitch += (this.aimPitchTarget - this.aimPitch) * (1 - Math.exp(-dt / 0.06));
+    this.peekLean += (this.peekLeanTarget - this.peekLean) * k;
     this.facing = facingX;
     const prone = clamp01((1.06 - c.height) / (1.06 - 0.5));
     this.walkPhase += dt * (moving ? (sprinting ? 13 : prone > 0.5 ? 5 : 8.5) : 0);
@@ -205,12 +211,14 @@ export class SoldierModel {
     place(p.bootL!, ankleR.x - f * 0.02 * tc * (1 - prone), 0.06 + prone * 0.06, -0.1, bootRot);
 
     // Torso and plate carrier follow the hip→shoulder segment (vertical upright, horizontal prone).
-    limb(p.torso!, { x: hip.x, y: hip.y - 0.05 }, { x: shoulder.x, y: shoulder.y + 0.09 }, 0, 0.52);
-    limb(p.carrier!, mixPt(hip, shoulder, 0.3), mixPt(hip, shoulder, 0.97), 0.02, 0.4);
+    // A depth-cover peek leans the head out to the mechanical eye; the shoulders follow part way.
+    const lean = this.peekLean;
+    limb(p.torso!, { x: hip.x, y: hip.y - 0.05 }, { x: shoulder.x, y: shoulder.y + 0.09 }, lean * 0.3, 0.52);
+    limb(p.carrier!, mixPt(hip, shoulder, 0.3), mixPt(hip, shoulder, 0.97), 0.02 + lean * 0.3, 0.4);
 
     // Head + helmet.
-    place(p.head!, head.x, head.y, 0);
-    place(p.helmet!, head.x, head.y + 0.08, 0);
+    place(p.head!, head.x, head.y, lean);
+    place(p.helmet!, head.x, head.y + 0.08, lean);
 
     // Rifle: swings around the pivot by the aim pitch; the tip is the mechanical muzzle anchor.
     const pivot: Pt = { x: f * a.pivotForward, y: a.pivotY };

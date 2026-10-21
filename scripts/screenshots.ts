@@ -220,6 +220,26 @@ async function main() {
   await page.keyboard.press('s');
   await page.waitForTimeout(1000);
   await shot(page, '10f-depth-lane', 'S glides back to the lane; the target is visible through the slot again.');
+
+  // v0.2.1 (2DS-3): peek from depth cover with the observe key.
+  await page.keyboard.press('w');
+  await page.waitForTimeout(1000);
+  await page.keyboard.down('d');
+  await page.waitForTimeout(1800);
+  await page.keyboard.up('d');
+  await page.waitForTimeout(400);
+  await shot(page, '11a-depth-cover', 'v0.2.1 depth cover: FAR behind the far jamb, walked up to it. The HUD offers F to peek; every sight ray ends on the jamb.');
+  await page.keyboard.down('f');
+  await page.waitForTimeout(500);
+  await shot(page, '11b-depth-peek-dev', 'Hold F: the head leans toward the lane past the jamb edge, the target is observed through the slot; the amber firing line still ends on the jamb.');
+  await page.keyboard.up('f');
+  await setMode(page, false);
+  // The mode button took focus (which releases held keys): hold F again on the canvas.
+  await focusCanvas(page);
+  await page.keyboard.down('f');
+  await page.waitForTimeout(500);
+  await shot(page, '11c-depth-peek-player', 'Same peek in player view: PEEK state, target revealed.');
+  await page.keyboard.up('f');
   await setMode(page, false);
 
   // API error demo + help

@@ -4,7 +4,7 @@ import type { MoveMode, Stance } from '../shared/types.ts';
 export interface HeldInput {
   /** -1 left, 0 none, +1 right */
   moveX: -1 | 0 | 1;
-  /** F held: observe above cover (crouched at cover only). */
+  /** F held: observe above waist-high cover (crouched), or peek around depth cover (off the lane). */
   observe: boolean;
   /** Right mouse held: aim / aim-over cover. */
   aim: boolean;

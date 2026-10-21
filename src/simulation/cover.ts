@@ -9,8 +9,12 @@
  * the aim pitch (clamped per stance). The visible barrel and the firing
  * origin are therefore the same thing. Hidden and observe keep the rifle
  * lowered (no pitch), so the "muzzle still blocked" state stays crisp.
+ *
+ * Depth cover: off the lane, with full-height cover directly ahead, hold F
+ * peeks. Only the eye leans toward the lane (around the cover's edge); the
+ * body collider and the lowered rifle stay behind the cover.
  */
-import { aabbFromBounds, clamp, type Aabb } from '../shared/geometry.ts';
+import { aabbFromBounds, clamp, rayAabb, type Aabb } from '../shared/geometry.ts';
 import {
   AIM_PITCH_LIMITS,
   ANCHORS,
@@ -21,6 +25,8 @@ import {
   COVER_REACH,
   COVER_TOP_MAX,
   COVER_TOP_MIN,
+  LANE_HALF_WIDTH,
+  PEEK,
   VAULT,
   type CoverState,
   type StanceAnchors,
@@ -35,6 +41,8 @@ export interface CoverCandidate {
   waistHigh: boolean;
   /** Explicit seed flag: the body may go over it with Space. */
   isVaultable: boolean;
+  /** Floor-standing cover too tall to see over: off the lane it is depth cover to peek around. */
+  fullHeight: boolean;
 }
 
 export const coverCandidates = (colliders: ColliderSeed[]): CoverCandidate[] =>
@@ -49,6 +57,7 @@ export const coverCandidates = (colliders: ColliderSeed[]): CoverCandidate[] =>
         isCover: c.isCover,
         waistHigh: c.isCover && c.blocksSight && top >= COVER_TOP_MIN && top <= COVER_TOP_MAX && box.min.y <= 0.05,
         isVaultable: c.isVaultable && top >= VAULT.topMin && top <= VAULT.topMax,
+        fullHeight: c.isCover && c.blocksSight && top > COVER_TOP_MAX && box.min.y <= 0.05,
       };
     });
 
@@ -99,10 +108,35 @@ export function findVaultableAhead(position: Vec3, facingX: -1 | 1, candidates: 
   return nearestAhead(position, facingX, candidates, VAULT.reach, (c) => c.isVaultable);
 }
 
+/** Signed lean (z) that brings the eye just past the cover's lane-side edge. */
+const leanToClear = (z: number, cover: CoverCandidate): number => {
+  const toLane = z > 0 ? -1 : 1;
+  const edge = toLane > 0 ? cover.box.max.z : cover.box.min.z;
+  return edge + toLane * PEEK.clearance - z;
+};
+
+/**
+ * Depth cover: the body is off the lane and full-height cover stands directly
+ * ahead, with its lane-side edge within a peek's lean. Returns that cover.
+ */
+export function findDepthCover(position: Vec3, facingX: -1 | 1, candidates: CoverCandidate[]): CoverCandidate | null {
+  if (Math.abs(position.z) <= LANE_HALF_WIDTH) return null;
+  const toLane = position.z > 0 ? -1 : 1;
+  return nearestAhead(position, facingX, candidates, COVER_REACH, (c) => {
+    if (!c.fullHeight) return false;
+    const lean = leanToClear(position.z, c) * toLane;
+    return lean > 0 && lean <= PEEK.maxLean;
+  });
+}
+
 export interface CoverEvaluation {
   state: CoverState;
   nearCover: CoverCandidate | null;
   braceable: CoverCandidate | null;
+  /** Full-height cover ahead while off the lane (hold F to peek around it). */
+  depthCover: CoverCandidate | null;
+  /** Signed z offset of the eye from the body while peeking (0 otherwise). */
+  peekLean: number;
   anchors: StanceAnchors;
   eye: Vec3;
   muzzle: Vec3;
@@ -137,11 +171,13 @@ export interface CoverInputs {
  * | hidden  | below barrier top  | below barrier top  |
  * | observe | just clears top    | still below top    |
  * | aimOver | clears top         | clears top         |
+ * | peek    | leans past the side edge of depth cover | stays behind it |
  *
  * Prone has no cover state: its eye simply sits below any waist-high top.
  */
 export function evaluateCover(input: CoverInputs, candidates: CoverCandidate[]): CoverEvaluation {
   const nearCover = findCoverAhead(input.position, input.facingX, candidates, COVER_REACH, true);
+  const depthCover = input.vaulting || input.stance === 'PRONE' ? null : findDepthCover(input.position, input.facingX, candidates);
   const braceable = findCoverAhead(input.position, input.facingX, candidates, BRACE_REACH, false, BRACE_Z_SLACK);
   const aiming = input.aimHeld && !input.sprinting && !input.vaulting;
 
@@ -164,6 +200,11 @@ export function evaluateCover(input: CoverInputs, candidates: CoverCandidate[]):
       anchors = ANCHORS.crouched;
     }
   }
+  let peekLean = 0;
+  if (state === 'none' && depthCover && input.observeHeld && !aiming && !input.moving) {
+    state = 'peek';
+    peekLean = leanAroundCover(input.position, input.facingX, anchors, depthCover, candidates);
+  }
 
   const pitchAllowed = !input.vaulting && (state === 'none' || state === 'aimOver');
   const limits = AIM_PITCH_LIMITS[input.stance];
@@ -171,7 +212,7 @@ export function evaluateCover(input: CoverInputs, candidates: CoverCandidate[]):
 
   const f = input.facingX;
   const pos = input.position;
-  const eye: Vec3 = { x: pos.x + f * anchors.eyeForward, y: pos.y + anchors.eyeY, z: pos.z };
+  const eye: Vec3 = { x: pos.x + f * anchors.eyeForward, y: pos.y + anchors.eyeY, z: pos.z + peekLean };
   const pivot: Vec3 = { x: pos.x + f * anchors.pivotForward, y: pos.y + anchors.pivotY, z: pos.z };
   // Muzzle = pivot + rotated rest offset; at zero pitch it is exactly (muzzleForward, muzzleY).
   const ox = anchors.muzzleForward - anchors.pivotForward;
@@ -179,5 +220,19 @@ export function evaluateCover(input: CoverInputs, candidates: CoverCandidate[]):
   const c = Math.cos(pitch);
   const s = Math.sin(pitch);
   const muzzle: Vec3 = { x: pivot.x + f * (ox * c - oy * s), y: pivot.y + ox * s + oy * c, z: pos.z };
-  return { state, nearCover, braceable, anchors, eye, muzzle, pivot, aimPitch: pitch, muzzleClamped: false, stance: input.stance, aiming };
+  return { state, nearCover, braceable, depthCover, peekLean, anchors, eye, muzzle, pivot, aimPitch: pitch, muzzleClamped: false, stance: input.stance, aiming };
+}
+
+/** Lean toward the lane to clear `cover`, stopped short of any solid the head would enter. */
+function leanAroundCover(position: Vec3, facingX: -1 | 1, anchors: StanceAnchors, cover: CoverCandidate, candidates: CoverCandidate[]): number {
+  const lean = leanToClear(position.z, cover);
+  const dir = Math.sign(lean);
+  const reach = Math.abs(lean);
+  const head: Vec3 = { x: position.x + facingX * anchors.eyeForward, y: position.y + anchors.eyeY, z: position.z };
+  let nearest = reach;
+  for (const c of candidates) {
+    const r = rayAabb(head, { x: 0, y: 0, z: dir }, c.box, reach);
+    if (r && r.tEntry >= 0 && r.tEntry < nearest) nearest = r.tEntry;
+  }
+  return dir * (nearest < reach ? Math.max(0, nearest - 0.05) : reach);
 }
