@@ -25,6 +25,7 @@ export function Hud({ p }: { p: Presentation }) {
           {pl.cover.state === 'none' && pl.cover.depthCover && <span className="hud-v">DEPTH COVER · F peek</span>}
           {pl.braced && <span className="hud-v amber">BRACED</span>}
           {pl.cover.aiming && pl.cover.state === 'none' && <span className="hud-v accent">ADS</span>}
+          {!pl.cover.aiming && pl.equipped === 'RIFLE' && <span className="hud-v muted">LOW READY</span>}
         </div>
         <div className="hud-row">
           <span className="hud-k">SPEED</span>
@@ -108,8 +109,8 @@ export function Hud({ p }: { p: Presentation }) {
         <span>C crouch</span>
         <span>Z prone</span>
         <span>F observe / peek</span>
-        <span>RMB aim</span>
-        <span>LMB fire</span>
+        <span>RMB aim (raise rifle)</span>
+        <span>LMB fire (aiming only)</span>
         <span>Q/E aim depth</span>
         <span>B brace</span>
         <span>1/2 rifle/camera</span>

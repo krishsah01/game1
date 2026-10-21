@@ -103,6 +103,12 @@ presentations of the same simulation.
 - **Cameras are dynamic objects for both sides.** The player sees any device (including their own, per the handoff) only while some friendly observer sees it. The opposition now has its own observed set: each OPFOR actor's eye (same FOV/range rules as yours) plus OPFOR cameras. Your cameras, and you, are known to the opposition only through those view cones. The developer view draws OPFOR view fans, their clear sight rays (red) and, in the inspector, which observer spotted each of your cameras.
 - **Preset 8, Camera war**: two cameras in the inventory, OPFOR A beyond the low wall and an OPFOR camera under the ceiling.
 
+### New in prototype v0.2.3 (Linear 2DS-5)
+
+- **Low ready unless aiming.** The rifle now points at the pointer only while the right mouse button is held. Otherwise it rests muzzle-down at a per-stance low-ready pitch (−50° standing, −45° crouched, −8° prone, `LOW_READY_PITCH`), and the mechanical muzzle goes with it. The reticle turns into a dashed ring reading `low ready · hold RMB to aim` and the HUD shows `LOW READY`.
+- **No shooting without aiming.** Left mouse from low ready is refused (`LOW READY · hold right mouse to aim`, no ammo spent). Sprinting cannot aim, so it cannot fire either. The developer *Test firing line* still probes the current muzzle without aiming. The inspector has a *Hold aim* latch so its Fire button keeps working without a mouse.
+- **Observe, then aim to raise the gun.** Behind waist-high cover, `F` observes with the rifle still at low ready below the top. Holding aim on top of that raises the rifle over the cover (aim-over): the body rises a little more, so more of it is exposed, but the muzzle clears the top and the shot can reach the target. Releasing aim drops back to observe. Hidden, peek and vault keep low ready.
+
 Mechanics (all in plain TypeScript under `src/simulation/`, independent of
 React and Three.js):
 
@@ -150,9 +156,9 @@ React and Three.js):
 | C | toggle crouch (crouched at waist-high cover = hidden); from prone, rise to a crouch |
 | Z | toggle prone (slow crawl, lowest profile, steadiest aim, cannot vault) |
 | F (hold) | observe above waist-high cover; off the lane behind full-height depth cover, peek around its edge toward the lane |
-| Right mouse (hold) | aim; from crouched cover: aim over |
-| Left mouse | fire (disabled while hidden or vaulting) |
-| Mouse height | the arms and rifle swing toward the pointer; the shot leaves the barrel tip |
+| Right mouse (hold) | aim: raise the rifle and point it at the pointer (otherwise it rests at low ready); at crouched cover, with or without F, aim over |
+| Left mouse | fire, only while aiming (never from low ready, hidden or vaulting) |
+| Mouse height | while aiming, the arms and rifle swing toward the pointer; the shot leaves the barrel tip |
 | Q / E | selected aim depth − / + (0.25 m steps, −1.5…+1.0 m); never auto-locks to an enemy |
 | B | brace on cover within reach (not while moving or sprinting) |
 | 1 / 2 | equip the rifle / a deployable camera (left mouse then places it on the nearest floor, ceiling or cover) |
@@ -310,6 +316,14 @@ scenario mid-mutation.
 | Every camera sits at depth 0; shooting a camera (either team) destroys it and stops its sight | verified | `tests/cameras.test.ts` |
 | Deployable cameras: inventory slot, LMB places, snaps to cover top / ground / ceiling, refuses out of reach, through walls and in mid-air | verified | `tests/cameras.test.ts` |
 | Opposition sees friendly cameras only through its own view cones (actor eyes, OPFOR cameras) | verified | `tests/cameras.test.ts` |
+
+### Prototype v0.2.3 (2DS-5)
+
+| Item | Result | Evidence |
+| --- | --- | --- |
+| Without aim the rifle rests at low ready (muzzle toward the ground) whatever the pointer does; with aim it points at the pointer | verified | `tests/aim-ready.test.ts`, `tests/stance-vault.test.ts` |
+| Firing requires aiming: refused from low ready (no ammo spent) and while sprinting; inspector latch counts as aiming | verified | `tests/aim-ready.test.ts` |
+| Observe keeps the rifle low; observe + aim raises it over cover (taller, more exposed, shot reaches the target) | verified | `tests/aim-ready.test.ts` |
 
 ### GraphQL and application state
 

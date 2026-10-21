@@ -5,10 +5,14 @@
  * mechanical state moves BOTH anchors; animation only interpolates toward
  * them and never decides collision or visibility.
  *
- * The arms follow the aim point: the muzzle swings around the rifle pivot by
- * the aim pitch (clamped per stance). The visible barrel and the firing
- * origin are therefore the same thing. Hidden and observe keep the rifle
- * lowered (no pitch), so the "muzzle still blocked" state stays crisp.
+ * Aiming (v0.2.3): only while the aim button is held do the arms point the
+ * rifle at the pointer (pitch clamped per stance). Otherwise the rifle rests
+ * at low ready, muzzle toward the ground (LOW_READY_PITCH), and cannot fire.
+ * The muzzle swings around the rifle pivot either way, so the visible barrel
+ * and the firing origin are the same thing. Hidden, observe, peek and vault
+ * keep the rifle at low ready, so the "muzzle still blocked" state stays crisp.
+ * At waist-high cover, observe + aim (or aim alone) raises the rifle over the
+ * top: aim-over exposes a little more of the body but can shoot.
  *
  * Depth cover: off the lane, with full-height cover directly ahead, hold F
  * peeks. Only the eye leans toward the lane (around the cover's edge); the
@@ -18,6 +22,7 @@ import { aabbFromBounds, clamp, rayAabb, type Aabb } from '../shared/geometry.ts
 import {
   AIM_PITCH_LIMITS,
   ANCHORS,
+  LOW_READY_PITCH,
   BODY_DEPTH,
   BODY_WIDTH,
   BRACE_REACH,
@@ -142,7 +147,7 @@ export interface CoverEvaluation {
   muzzle: Vec3;
   /** Rifle pivot the muzzle swings around. */
   pivot: Vec3;
-  /** Applied aim pitch in radians (0 while hidden, observing or vaulting). */
+  /** Applied rifle pitch in radians: toward the pointer while aiming, else the stance's low-ready pitch. */
   aimPitch: number;
   /** True when the muzzle was pulled back to a solid face (rifle pressed against cover). */
   muzzleClamped: boolean;
@@ -206,9 +211,9 @@ export function evaluateCover(input: CoverInputs, candidates: CoverCandidate[]):
     peekLean = leanAroundCover(input.position, input.facingX, anchors, depthCover, candidates);
   }
 
-  const pitchAllowed = !input.vaulting && (state === 'none' || state === 'aimOver');
+  const pointed = aiming && (state === 'none' || state === 'aimOver');
   const limits = AIM_PITCH_LIMITS[input.stance];
-  const pitch = pitchAllowed ? clamp(input.aimPitch, (-limits.down * Math.PI) / 180, (limits.up * Math.PI) / 180) : 0;
+  const pitch = pointed ? clamp(input.aimPitch, (-limits.down * Math.PI) / 180, (limits.up * Math.PI) / 180) : (LOW_READY_PITCH[input.stance] * Math.PI) / 180;
 
   const f = input.facingX;
   const pos = input.position;

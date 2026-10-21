@@ -560,6 +560,17 @@ code {
   background: var(--cyan);
   box-shadow: 0 0 8px var(--cyan);
 }
+/* Low ready: the rifle is not pointed; dashed ring, no depth dot. */
+.reticle.low-ready .ring {
+  border-style: dashed;
+}
+.reticle.low-ready .dot,
+.reticle.low-ready .guide {
+  display: none;
+}
+.reticle.low-ready .reticle-label {
+  color: var(--muted);
+}
 .reticle-label {
   position: absolute;
   left: 50%;

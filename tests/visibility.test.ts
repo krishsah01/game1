@@ -57,7 +57,7 @@ describe('visibility and knowledge separation', () => {
     expect(w.sampleResultsFor('enemy-b').every((s) => s.reason === 'smoke')).toBe(true);
     // Aim straight at the (hidden) enemy's true chest position: the ray passes through smoke.
     const enemy = w.actors.find((a) => a.id === 'enemy-b')!;
-    hold(w, { pointerWorld: { x: enemy.position.x, y: 1.2 } });
+    hold(w, { pointerWorld: { x: enemy.position.x, y: 1.2 }, aim: true });
     w.command({ type: 'setSelectedDepth', depth: enemy.position.z });
     w.step();
     const r = w.command({ type: 'fire' });

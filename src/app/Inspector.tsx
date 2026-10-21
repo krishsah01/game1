@@ -142,7 +142,12 @@ export function Inspector({ controller, state, p, mode, devOptions, onDevOptions
         </div>
         <div className="btn-row">
           <button onClick={() => cmd({ type: 'testFiringLine' })}>Test firing line</button>
-          <button onClick={() => cmd({ type: 'fire' })}>Fire</button>
+          <button className={pl?.aimLatched ? 'on' : ''} onClick={() => cmd({ type: 'setAimLatch', on: !pl?.aimLatched })} title="Same as holding the right mouse button">
+            Hold aim {pl?.aimLatched ? 'ON' : 'OFF'}
+          </button>
+          <button onClick={() => cmd({ type: 'fire' })} title="Fires only while aiming (right mouse or Hold aim)">
+            Fire
+          </button>
           <button onClick={() => cmd({ type: 'reload' })}>Reload</button>
         </div>
         {pl && (

@@ -36,15 +36,15 @@ export function Help({ onClose }: { onClose: () => void }) {
             </tr>
             <tr>
               <td>Right mouse (hold)</td>
-              <td>Aim; from crouched cover raises head and muzzle (aim over)</td>
+              <td>Aim: raises the rifle and points it at the pointer. Without it the rifle rests at low ready (muzzle toward the ground) and cannot fire. At low cover, observing (F) and aiming raises the rifle over the top (aim over): a little more of you shows, but you can shoot</td>
             </tr>
             <tr>
               <td>Left mouse</td>
-              <td>Fire a demonstrator shot (disabled while hidden or vaulting)</td>
+              <td>Fire a demonstrator shot, only while aiming (never from low ready, hidden or vaulting)</td>
             </tr>
             <tr>
               <td>Mouse height</td>
-              <td>The arms and rifle swing toward the pointer; the shot leaves the raised or lowered barrel tip</td>
+              <td>While aiming, the arms and rifle swing toward the pointer; the shot leaves the raised or lowered barrel tip</td>
             </tr>
             <tr>
               <td>Q / E</td>

@@ -74,6 +74,8 @@ export interface PlayerState {
   cover: CoverEvaluation;
   braced: boolean;
   coverIntent: CoverIntent;
+  /** Inspector aim latch: behaves like holding the aim button. */
+  aimLatched: boolean;
   zone: DepthZone | null;
   /** Requested depth lane: LANE (z = 0) or FAR (far edge of the current zone). */
   depthLane: DepthLane;
@@ -330,6 +332,7 @@ export class World {
       cover,
       braced: false,
       coverIntent: null,
+      aimLatched: false,
       zone: zoneAt(this.scene.depthZones, position),
       depthLane: Math.abs(position.z) > LANE_HALF_WIDTH ? 'FAR' : 'LANE',
       depthTargetZ: null,
@@ -428,6 +431,9 @@ export class World {
         return null;
       case 'setSelectedDepth':
         setSelectedDepth(this.aim, cmd.depth);
+        return null;
+      case 'setAimLatch':
+        p.aimLatched = cmd.on;
         return null;
       case 'toggleBrace':
         this.setBrace(!p.braced);
@@ -739,7 +745,7 @@ export class World {
     const wantsMove = held.moveX !== 0;
     if (wantsMove && p.coverIntent) p.coverIntent = null;
     const observeHeld = held.observe || p.coverIntent === 'observe';
-    const aimHeld = held.aim || p.coverIntent === 'aimOver';
+    const aimHeld = held.aim || p.aimLatched || p.coverIntent === 'aimOver';
     const sprintMode = p.moveMode === 'SPRINT' && p.stance !== 'PRONE';
     const standingAim = aimHeld && p.stance === 'STANDING' && !sprintMode;
     // Requested aim pitch: angle from the rifle pivot to the pointer, in the facing frame.
@@ -1036,6 +1042,11 @@ export class World {
     if (!test && p.vault) {
       this.pushLog('Cannot fire while vaulting.');
       this.feedback('VAULTING · cannot fire');
+      return null;
+    }
+    if (!test && !p.cover.aiming) {
+      this.pushLog('Cannot fire from low ready. Hold the aim button first.');
+      this.feedback('LOW READY · hold right mouse to aim');
       return null;
     }
     if (!test && p.cover.state === 'hidden') {

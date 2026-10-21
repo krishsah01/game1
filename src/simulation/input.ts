@@ -44,6 +44,8 @@ export type Command =
   | { type: 'vault' }
   | { type: 'stepDepth'; direction: -1 | 1 }
   | { type: 'setSelectedDepth'; depth: number }
+  /** Inspector latch: keep the aim button held without a mouse (fire needs aiming). */
+  | { type: 'setAimLatch'; on: boolean }
   | { type: 'toggleBrace' }
   | { type: 'setBrace'; on: boolean }
   /** Latched UI buttons for inspecting cover states without holding keys. */

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SLOT_Z_MIN } from '../src/shared/scenarios.ts';
+import { LOW_READY_PITCH } from '../src/shared/tuning.ts';
 import type { World } from '../src/simulation/world.ts';
 import { hold, makeWorld, observed, seconds, ticks } from './helpers.ts';
 
@@ -47,7 +48,7 @@ describe('peek from depth cover (station C)', () => {
     expect(p.cover.peekLean).toBeGreaterThan(0);
     expect(p.position.z).toBeCloseTo(-1.2, 2); // the body never moves
     expect(p.cover.muzzle.z).toBeCloseTo(-1.2, 2);
-    expect(p.cover.aimPitch).toBe(0);
+    expect(p.cover.aimPitch).toBeCloseTo((LOW_READY_PITCH.STANDING * Math.PI) / 180, 6); // rifle at low ready
     expect(observed(w, 'enemy-c')).toBe(true);
     // Sight begins at the eye, fire at the muzzle: the firing line still ends on the jamb.
     const r = w.command({ type: 'testFiringLine' });

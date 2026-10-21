@@ -80,6 +80,18 @@ export const AIM_PITCH_LIMITS: Record<Stance, { up: number; down: number }> = {
   PRONE: { up: 25, down: 8 },
 };
 
+/**
+ * Low ready (v0.2.3): without the aim button the rifle is not pointed at
+ * anything. It rests muzzle-down at this pitch (degrees, negative = down) and
+ * cannot fire. Holding the aim button raises it toward the pointer.
+ */
+export const LOW_READY_PITCH: Record<Stance, number> = {
+  STANDING: -50,
+  CROUCHED: -45,
+  /** Prone rests the rifle on the ground in front. */
+  PRONE: -8,
+};
+
 /** Waist-high cover is recognised when its top is inside this band. */
 export const COVER_TOP_MIN = 0.8;
 export const COVER_TOP_MAX = 1.45;

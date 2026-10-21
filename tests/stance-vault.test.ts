@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { BARRIER_TOP_Y, LOW_WALL_AB_TOP_Y, ROOM_DEPTH, buildScene, scenarioById } from '../src/shared/scenarios.ts';
-import { ANCHORS, MOVE_SPEED, PRONE_SPEED_FACTOR, VAULT } from '../src/shared/tuning.ts';
+import { ANCHORS, LOW_READY_PITCH, MOVE_SPEED, PRONE_SPEED_FACTOR, VAULT } from '../src/shared/tuning.ts';
 import { bounds } from '../src/shared/types.ts';
 import { World } from '../src/simulation/world.ts';
 import { hold, makeWorld, observed, seconds, ticks } from './helpers.ts';
@@ -48,7 +48,7 @@ describe('prone (Z)', () => {
   it('prone behind the low wall: eye below the top, target unseen, muzzle pressed to the face, a shot strikes the wall', () => {
     const w = makeWorld('exposure-ladder', { baseSwayAmplitude: 0 });
     w.command({ type: 'setStance', stance: 'PRONE' });
-    hold(w, { pointerWorld: { x: -6.2, y: 1.2 } });
+    hold(w, { pointerWorld: { x: -6.2, y: 1.2 }, aim: true });
     ticks(w, 10);
     expect(w.player.cover.state).toBe('none');
     expect(w.player.cover.eye.y).toBeLessThan(BARRIER_TOP_Y);
@@ -161,56 +161,57 @@ describe('vault (Space)', () => {
   });
 });
 
-describe('arms follow the aim point', () => {
+describe('arms follow the aim point while aiming', () => {
   it('the muzzle swings around the rifle pivot with the pointer height, within the stance limits', () => {
+    const aim = ANCHORS.standingAim;
     const level = makeWorld('depth-shot');
-    hold(level, { pointerWorld: { x: 13.6, y: ANCHORS.standing.pivotY } });
+    hold(level, { pointerWorld: { x: 13.6, y: aim.pivotY }, aim: true });
     ticks(level, 2);
     expect(level.player.cover.aimPitch).toBeCloseTo(0, 2);
-    expect(level.player.cover.muzzle.y).toBeCloseTo(ANCHORS.standing.muzzleY, 2);
+    expect(level.player.cover.muzzle.y).toBeCloseTo(aim.muzzleY, 2);
 
     const up = makeWorld('depth-shot');
-    hold(up, { pointerWorld: { x: 8.5, y: 4.0 } });
+    hold(up, { pointerWorld: { x: 8.5, y: 4.0 }, aim: true });
     ticks(up, 2);
     expect(up.player.cover.aimPitch).toBeGreaterThan(0.5);
-    expect(up.player.cover.muzzle.y).toBeGreaterThan(ANCHORS.standing.muzzleY + 0.3);
+    expect(up.player.cover.muzzle.y).toBeGreaterThan(aim.muzzleY + 0.3);
     const d = Math.hypot(up.player.cover.muzzle.x - up.player.cover.pivot.x, up.player.cover.muzzle.y - up.player.cover.pivot.y);
-    expect(d).toBeCloseTo(Math.hypot(ANCHORS.standing.muzzleForward, ANCHORS.standing.muzzleY - ANCHORS.standing.pivotY), 5);
+    expect(d).toBeCloseTo(Math.hypot(aim.muzzleForward, aim.muzzleY - aim.pivotY), 5);
 
     const down = makeWorld('depth-shot');
-    hold(down, { pointerWorld: { x: 8.5, y: -1.0 } });
+    hold(down, { pointerWorld: { x: 8.5, y: -1.0 }, aim: true });
     ticks(down, 2);
     expect(down.player.cover.aimPitch).toBeLessThan(-0.5);
-    expect(down.player.cover.muzzle.y).toBeLessThan(ANCHORS.standing.muzzleY - 0.3);
+    expect(down.player.cover.muzzle.y).toBeLessThan(aim.muzzleY - 0.3);
 
     const straightUp = makeWorld('depth-shot');
-    hold(straightUp, { pointerWorld: { x: 6.5, y: 30 } });
+    hold(straightUp, { pointerWorld: { x: 6.5, y: 30 }, aim: true });
     ticks(straightUp, 2);
     expect(straightUp.player.cover.aimPitch).toBeCloseTo((70 * Math.PI) / 180, 3);
 
     const prone = makeWorld('depth-shot');
     prone.command({ type: 'setStance', stance: 'PRONE' });
-    hold(prone, { pointerWorld: { x: 8.5, y: 4.0 } });
+    hold(prone, { pointerWorld: { x: 8.5, y: 4.0 }, aim: true });
     ticks(prone, 2);
     expect(prone.player.cover.aimPitch).toBeCloseTo((25 * Math.PI) / 180, 3);
   });
 
   it('the firing line starts where the barrel ends: an upward aim fires from the raised muzzle', () => {
     const w = makeWorld('depth-shot', { baseSwayAmplitude: 0 });
-    hold(w, { pointerWorld: { x: 8.5, y: 3.0 } });
+    hold(w, { pointerWorld: { x: 8.5, y: 3.0 }, aim: true });
     ticks(w, 2);
     const r = w.command({ type: 'fire' })!;
     expect(r.origin.y).toBeCloseTo(w.player.cover.muzzle.y, 6);
-    expect(r.origin.y).toBeGreaterThan(ANCHORS.standing.muzzleY + 0.2);
+    expect(r.origin.y).toBeGreaterThan(ANCHORS.standingAim.muzzleY + 0.2);
     expect(r.direction.y).toBeGreaterThan(0.3);
   });
 
-  it('hidden and observe keep the rifle lowered; aim-over pitches it', () => {
+  it('hidden and observe keep the rifle at low ready; aim-over pitches it', () => {
     const observe = makeWorld('exposure-ladder');
     hold(observe, { observe: true, pointerWorld: { x: -6.2, y: 4.0 } });
     ticks(observe, 10);
     expect(observe.player.cover.state).toBe('observe');
-    expect(observe.player.cover.aimPitch).toBe(0);
+    expect(observe.player.cover.aimPitch).toBeCloseTo((LOW_READY_PITCH.CROUCHED * Math.PI) / 180, 6);
     expect(observe.player.cover.muzzle.y).toBeLessThan(BARRIER_TOP_Y);
 
     const aimOver = makeWorld('exposure-ladder');
